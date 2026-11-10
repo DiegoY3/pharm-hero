@@ -80,6 +80,7 @@
   let boxView = 'module';
   let rhythmId = 'vf';
   let wizardStep = 1;
+  let includeExtras = false;
   const HOME_VIEWS = [
     ['module', 'Module'],
     ['cardiac', 'Cardiac'],
@@ -128,7 +129,8 @@
       field: !activeList(fields).length ? 'all' : fields.filter(function (f) { return f !== 'all'; }).join(','),
       subset: !activeList(subsets).length ? 'all' : subsets.filter(function (f) { return f !== 'all'; }).join(','),
       limit: limitEl ? limitEl.value : (s.limit || '20'),
-      mode: modeBtn ? modeBtn.dataset.id : (s.mode || '')
+      mode: modeBtn ? modeBtn.dataset.id : (s.mode || ''),
+      includeExtras: includeExtras
     };
   }
   function saveUi() {
@@ -162,6 +164,7 @@
   }
   function matchFact(fact, opts) {
     const subsets = opts.subsets ? activeList(opts.subsets) : (opts.subset && opts.subset !== 'all' ? String(opts.subset).split(',') : []);
+    if (fact.extra && !opts.includeExtras && subsets.indexOf('extra') < 0) return false;
     if (subsets.length && !subsets.some(function (s) { return matchSubset(fact, s); })) return false;
     const fields = opts.fields ? activeList(opts.fields) : (opts.field && opts.field !== 'all' ? String(opts.field).split(',') : []);
     if (fields.length && fields.indexOf(PharmFacts.filterKey(fact)) < 0) return false;
@@ -174,6 +177,26 @@
   function factsFor(opts) {
     return PharmFacts.all().filter(function (f) { return matchFact(f, opts); });
   }
+  /* Extra drugs (no module) that this selection would pull in if the learner said Yes. */
+  function extraDrugsFor(opts) {
+    const probe = Object.assign({}, opts, { includeExtras: true });
+    const seen = {};
+    const list = [];
+    PharmFacts.all().forEach(function (f) {
+      if (!f.extra || seen[f.drug] || !matchFact(f, probe)) return;
+      seen[f.drug] = 1;
+      list.push(f.drug);
+    });
+    const drugs = window.DRUG_BOX.drugs;
+    list.sort(function (a, b) { return drugs[a].name.localeCompare(drugs[b].name); });
+    return list.map(function (k) { return drugs[k].name; });
+  }
+  /* Pool for distractors: extras only appear when this session includes them. */
+  function sessionFacts() {
+    const all = PharmFacts.all();
+    if (session && session.opts && session.opts.includeExtras) return all;
+    return all.filter(function (f) { return !f.extra; });
+  }
   function drugIdsFor(opts) {
     const ids = new Set();
     factsFor(opts).forEach(function (f) { ids.add(f.drug); });
@@ -181,7 +204,7 @@
     subsets.forEach(function (subset) {
       if (subset.indexOf('box:') !== 0) return;
       const slot = slotById(subset.slice(4));
-      if (slot) drugsInSlot(slot).forEach(function (k) { if (window.DRUG_BOX.drugs[k]) ids.add(k); });
+      if (slot) drugsInSlot(slot).forEach(function (k) { const dk = window.DRUG_BOX.drugs[k]; if (dk && (dk.module != null || opts.includeExtras)) ids.add(k); });
     });
     return ids;
   }
@@ -233,7 +256,7 @@
     if (!correct) return null;
     const truths = trueTexts(fact).concat([PharmFacts.textOf(fact), correct]);
     const pool = [];
-    PharmFacts.all().forEach(function (other) {
+    sessionFacts().forEach(function (other) {
       if (other.id === fact.id) return;
       if (PharmFacts.filterKey(other) !== PharmFacts.filterKey(fact)) return;
       const text = optionText(other);
@@ -361,6 +384,8 @@
     document.body.classList.add('view-study', 'view-session');
     document.body.classList.remove('view-build', 'view-box', 'view-page');
     if (window.DrugBox) DrugBox.close();
+    opts.includeExtras = !!opts.includeExtras;
+    includeExtras = false;
     session = {
       mode: opts.mode,
       opts: opts,
@@ -400,6 +425,7 @@
     logIfNeeded();
     session = null;
     wizardStep = 1;
+    includeExtras = false;
     document.body.classList.remove('view-study', 'view-session', 'view-build', 'view-box');
     document.body.classList.add('view-page');
     renderStudyHome();
@@ -573,6 +599,7 @@
     const d = PharmFacts.drug(fact.drug);
     const tags = [];
     if (d.module != null) tags.push('Module ' + d.module);
+    else tags.push('EXTRA');
     if (cardiacHas(fact.drug)) tags.push('Cardiac');
     if (d.bucket || fact.bucket) tags.push(d.bucket || fact.bucket);
     const tagHtml = tags.length ? '<p class="drug-tags">' + tags.map(function (t) { return '<span class="tag-chip">' + esc(t) + '</span>'; }).join('') + '</p>' : '';
@@ -898,7 +925,7 @@
     const truth = PharmFacts.textOf(fact);
     let statement = truth;
     let answer = true;
-    const others = shuffle(PharmFacts.all().filter(function (f) {
+    const others = shuffle(sessionFacts().filter(function (f) {
       return f.id !== fact.id && PharmFacts.filterKey(f) === PharmFacts.filterKey(fact);
     }));
     if (Math.random() < 0.5) {
@@ -1481,12 +1508,12 @@
     if (boxView === 'module') {
       const mods = {};
       keys.forEach(function (key) {
-        const title = drugs[key].module == null ? 'Unscheduled / extra' : 'Module ' + drugs[key].module;
+        const title = drugs[key].module == null ? 'Extra drugs' : 'Module ' + drugs[key].module;
         (mods[title] = mods[title] || []).push(key);
       });
       Object.keys(mods).sort(function (a, b) {
-        const na = a === 'Unscheduled / extra' ? 99 : Number(a.slice(7));
-        const nb = b === 'Unscheduled / extra' ? 99 : Number(b.slice(7));
+        const na = a === 'Extra drugs' ? 99 : Number(a.slice(7));
+        const nb = b === 'Extra drugs' ? 99 : Number(b.slice(7));
         return na - nb;
       }).forEach(function (title) { push(title, mods[title]); });
     } else if (boxView === 'alpha') {
@@ -1571,9 +1598,18 @@
     wall.innerHTML = '<div class="tabbar"><button type="button" class="tab-add" id="add-tab" aria-label="Add a drug tab">+</button><div class="tabs">' + tabHtml + '</div><button type="button" class="clear" id="clear-tabs">Clear all</button></div>' +
       '<div class="sheet"><div class="detail">' + head + WALL_SECTIONS.map(function (spec) { return sectionHtml(d, spec); }).join('') + '</div></div>';
   }
+  function syncExtrasGroup() {
+    const group = document.getElementById('extras-group');
+    if (!group) return;
+    const names = extrasNames();
+    if (!names.length) { includeExtras = false; group.hidden = true; group.innerHTML = ''; return; }
+    group.hidden = false;
+    group.innerHTML = '<p class="eyebrow">Extra drugs</p>' + extrasQuestionHtml(names);
+  }
   function updateDeckNote() {
     const note = document.getElementById('deck-note');
     if (!note) return;
+    syncExtrasGroup();
     const opts = optsFromUi();
     const facts = factsFor(opts);
     facts.forEach(function (f) { PharmProgress.noteHash(f.id, f.hash); });
@@ -1641,33 +1677,59 @@
       return '<button type="button" class="mode' + (modeOn === row[0] ? ' on' : '') + '" data-group="mode" data-id="' + row[0] + '"><span class="num">' + row[1] + '</span><span><h3>' + row[2] + '</h3><p>' + row[3] + '</p></span><span class="go">›</span></button>';
     }).join('');
   }
+  function extrasNames() {
+    return extraDrugsFor(optsFromUi());
+  }
+  function extrasQuestionHtml(names) {
+    return '<p class="extras-q">Include extra drugs in this session?</p>' +
+      '<p class="extras-names">' + names.map(esc).join(', ') + '</p>' +
+      '<div class="slots" id="extras-slots">' +
+      '<button type="button" class="slot' + (includeExtras ? ' on' : '') + '" data-group="extras" data-id="extras-yes"><b>Yes</b></button>' +
+      '<button type="button" class="slot' + (includeExtras ? '' : ' on') + '" data-group="extras" data-id="extras-no"><b>No</b></button></div>';
+  }
+  function wizardSteps() {
+    const steps = ['mode', 'field', 'drug'];
+    if (extrasNames().length) steps.push('extras');
+    steps.push('ready');
+    return steps;
+  }
   function renderWizard(host, s) {
     const fieldsOn = savedFields(s);
     const subsetsOn = savedSubsets(s).filter(function (id) { return id !== 'manual'; });
     const modeOn = s.mode || '';
     const names = { flash: 'Flashcards', learn: 'Learn', test: 'Test', match: 'Match', spell: 'Spell' };
+    const steps = wizardSteps();
+    const total = steps.length;
+    if (wizardStep > total) wizardStep = total;
+    const kind = steps[wizardStep - 1];
     let dots = '';
-    for (let i = 1; i <= 4; i++) dots += '<i class="' + (i === wizardStep ? 'on' : (i < wizardStep ? 'done' : '')) + '"></i>';
+    for (let i = 1; i <= total; i++) dots += '<i class="' + (i === wizardStep ? 'on' : (i < wizardStep ? 'done' : '')) + '"></i>';
     let body = '';
-    if (wizardStep === 1) {
+    if (kind === 'mode') {
       body = '<div class="ask"><h1>Which mode?</h1><p>Pick one.</p></div><div class="choices"><div class="modes" id="mode-slots">' + modeHtml(modeOn) + '</div></div>';
-    } else if (wizardStep === 2) {
+    } else if (kind === 'field') {
       body = '<div class="ask"><h1>What do you want to memorize?</h1><p>Pick any fields. All clears the others.</p></div><div class="choices"><div class="slots" id="field-slots">' + fieldHtml(fieldsOn) + '</div></div>';
-    } else if (wizardStep === 3) {
+    } else if (kind === 'drug') {
       body = '<div class="ask"><h1>Which drugs?</h1><p>Modules and Cardiac first. All drugs clears the others.</p></div><div class="choices"><div class="slots" id="subset-slots">' + subsetHtml(subsetsOn) + '</div></div>';
+    } else if (kind === 'extras') {
+      body = '<div class="ask"><h1>Include extra drugs in this session?</h1><p>Your picks include drugs that are not in a module.</p></div><div class="choices"><div class="extras-box" id="extras-box">' +
+        '<p class="extras-names">' + extrasNames().map(esc).join(', ') + '</p>' +
+        '<div class="slots" id="extras-slots"><button type="button" class="slot' + (includeExtras ? ' on' : '') + '" data-group="extras" data-id="extras-yes"><b>Yes</b></button>' +
+        '<button type="button" class="slot' + (includeExtras ? '' : ' on') + '" data-group="extras" data-id="extras-no"><b>No</b></button></div></div></div>';
     } else {
+      const extraRow = extrasNames().length ? '<div class="row"><p class="k">Extra drugs</p><strong>' + (includeExtras ? 'Included' : 'Not included') + '</strong></div>' : '';
       const fieldLabels = FIELD_SLOTS.filter(function (row) { return fieldsOn.indexOf(row[0]) >= 0; }).map(function (row) { return row[1]; });
       const drugLabels = studyRows().filter(function (row) { return row[0] !== 'divider' && subsetsOn.indexOf(row[0]) >= 0; }).map(function (row) { return row[1]; });
       body = '<div class="ask"><h1>Ready when you are.</h1><p>This is the deck. Start begins ' + esc(names[modeOn] || 'study') + '.</p></div><div class="choices"><div class="summary">' +
         '<div class="row"><p class="k">Mode</p><strong>' + esc(names[modeOn] || 'Choose a mode') + '</strong></div>' +
         '<div class="row"><p class="k">Memorize</p><strong>' + esc(fieldLabels.join(', ') || 'All') + '</strong></div>' +
-        '<div class="row"><p class="k">Drugs</p><strong>' + esc(drugLabels.join(', ') || 'All drugs') + '</strong></div></div></div>';
+        '<div class="row"><p class="k">Drugs</p><strong>' + esc(drugLabels.join(', ') || 'All drugs') + '</strong></div>' + extraRow + '</div></div>';
     }
     const backLabel = wizardStep === 1 ? 'Drug box' : 'Back';
-    const primary = wizardStep === 4
+    const primary = kind === 'ready'
       ? '<button type="button" class="start-go" id="wiz-start">Start</button>'
       : '<button type="button" class="start-go" id="wiz-next">Next</button>';
-    host.innerHTML = '<div class="wizard"><header class="wiz-top"><img class="brand-icon" src="assets/icons/pharm-hero.png" alt=""><div><strong>Pharm Hero</strong><span>Study</span></div><div class="progress"><div class="dots">' + dots + '</div><span class="count">' + wizardStep + '/4</span></div></header>' +
+    host.innerHTML = '<div class="wizard"><header class="wiz-top"><img class="brand-icon" src="assets/icons/pharm-hero.png" alt=""><div><strong>Pharm Hero</strong><span>Study</span></div><div class="progress"><div class="dots">' + dots + '</div><span class="count">' + wizardStep + '/' + total + '</span></div></header>' +
       body + '<p class="wiz-hint" id="wiz-hint" hidden></p><div class="dock"><button type="button" class="back" id="wiz-back">' + backLabel + '</button>' + primary + '</div></div>';
     syncWizardNav();
   }
@@ -1692,7 +1754,8 @@
     const limits = [['10', '10'], ['20', '20'], ['all', 'All']];
     host.innerHTML =
       '<div class="col"><section class="group"><p class="eyebrow">What to memorize</p><div class="slots" id="field-slots">' + fieldButtons + '</div></section>' +
-      '<section class="group"><p class="eyebrow">Drug subset</p><div class="slots" id="subset-slots">' + subsetButtons + '</div></section></div>' +
+      '<section class="group"><p class="eyebrow">Drug subset</p><div class="slots" id="subset-slots">' + subsetButtons + '</div></section>' +
+      '<section class="group extras-group" id="extras-group" hidden></section></div>' +
       '<section class="col"><p class="eyebrow">Mode</p><div class="modes" id="mode-slots">' + modes + '</div>' +
       '<p class="deck-note" id="deck-note"></p>' +
       '<div class="start-row" id="start-row" hidden><label>Cards <select id="limit-filter" aria-label="How many cards">' +
@@ -1703,6 +1766,13 @@
   function toggleSlot(btn) {
     const id = btn.dataset.id;
     if (id === 'open-build') { openDesigner(); return; }
+    if (btn.dataset.group === 'extras') {
+      includeExtras = id === 'extras-yes';
+      btn.parentElement.querySelectorAll('.slot').forEach(function (el) { el.classList.toggle('on', el === btn); });
+      updateDeckNote();
+      syncWizardNav();
+      return;
+    }
     if (btn.dataset.group === 'mode') {
       const was = btn.classList.contains('on');
       document.querySelectorAll('#mode-slots .mode').forEach(function (el) { el.classList.remove('on'); });
@@ -1720,11 +1790,12 @@
   }
   function wizardBlockReason() {
     const opts = optsFromUi();
-    if ((wizardStep === 1 || wizardStep === 4) && !opts.mode) return 'Pick a mode to continue.';
-    if (wizardStep === 2 && !document.querySelector('#field-slots .on')) return 'Pick at least one field.';
-    if (wizardStep === 3 && !document.querySelector('#subset-slots .on')) return 'Pick at least one drug group.';
-    if (wizardStep === 3 && !factsFor(opts).length) return 'No drugs in that group. Pick another.';
-    if (wizardStep === 4 && !factsFor(opts).length) return 'No drugs in that group. Go back and pick another.';
+    const kind = wizardSteps()[wizardStep - 1];
+    if ((kind === 'mode' || kind === 'ready') && !opts.mode) return 'Pick a mode to continue.';
+    if (kind === 'field' && !document.querySelector('#field-slots .on')) return 'Pick at least one field.';
+    if (kind === 'drug' && !document.querySelector('#subset-slots .on')) return 'Pick at least one drug group.';
+    if (kind === 'drug' && !factsFor(Object.assign({}, opts, { includeExtras: true })).length) return 'No drugs in that group. Pick another.';
+    if ((kind === 'extras' || kind === 'ready') && !factsFor(opts).length) return 'No drugs match. Go back and pick another group, or include the extra drugs.';
     return '';
   }
   function wizardHint(text) {
@@ -1835,7 +1906,7 @@
           startSession(Object.assign({ mode: opts.mode }, opts));
           return;
         }
-        wizardStep = Math.min(4, wizardStep + 1);
+        wizardStep = Math.min(wizardSteps().length, wizardStep + 1);
         saveUi();
         renderStudyHome();
         return;

@@ -10,7 +10,7 @@
  *   topics[id]   = optional teaching topics with no rhythm id (postrosc, cardiogenicshock, digoxintox, hypothermia, bbb): { title, source, note, also[], drugs[] same row format as rhythms } — UI ignores until wired
  *   Rhythm ids: nsr, sbrady, stach, sarrhythmia, sarrest, sexit, pac, wap, mat, afib, afrvr, flutter, svt, pjc, jxesc, accjx, jxtach, pvc, ufpvc, mfpvc, bigeminy, ivr, aivr, vt, torsades, avb1, mobitz1, mobitz2, avb3, apaced, vpaced, vf, pvt, pea, asystole
  * Druggy can also push live at runtime:  DrugBox.load(payloadObject)   (merges drugs/rhythms, re-renders)
- * 2026-10-09 Build Two: + topics; hypothermia/digoxin remarks. (2026-11-10 Pharm Hero: two non-module drug entries removed per Diego.) Sources: AHA ACLS/PALS 2020+2023, AHA/ACC STEMI 2013, NREMT Paramedic.
+ * 2026-10-09 Build Two: + norepinephrine, + digifab (Digoxin Immune Fab, hospital/critical-care scope), + topics; arrest rhythms get post-ROSC norepi (cond), hypothermia/digoxin remarks. Sources: AHA ACLS/PALS 2020+2023, AHA/ACC STEMI 2013, FDA DigiFab label, NREMT Paramedic.
  */
 window.DRUG_BOX = {
  "schema": "ecg-drug-box/1",
@@ -2082,6 +2082,125 @@ window.DRUG_BOX = {
     "Bronchospasm"
    ],
    "special_considerations": []
+  },
+  "norepinephrine": {
+   "name": "Norepinephrine Bitartrate",
+   "alias": "Levophed",
+   "module": null,
+   "source": "Not on Diego’s EMS list — added from AHA ACLS post–cardiac arrest care (vasopressor table) + PALS shock; NREMT Paramedic scope (vasopressor infusion). Follow local protocol.",
+   "classification": [
+    "Sympathomimetic (catecholamine)",
+    "Vasopressor",
+    "Inotropic agent"
+   ],
+   "mechanism_of_action": [
+    "Potent alpha-1 agonist → peripheral vasoconstriction, raises SVR and BP",
+    "Beta-1 agonist → increased contractility (inotropy); little beta-2 effect"
+   ],
+   "dosage": [
+    {
+     "who": "Adult",
+     "t": "IV/IO infusion only (pump) — no IV push"
+    },
+    {
+     "who": "Adult",
+     "t": "Hypotension/shock & post-ROSC: 0.1-0.5 mcg/kg/min, titrate to SBP ≥90 / MAP ≥65 mmHg"
+    },
+    {
+     "who": "Pediatric",
+     "t": "IV/IO infusion only (pump) — no IV push"
+    },
+    {
+     "who": "Pediatric",
+     "t": "Shock (fluid-refractory, warm/vasodilated): 0.1-2 mcg/kg/min, titrate to age-specific BP"
+    }
+   ],
+   "indications": [
+    "Post-ROSC hypotension after fluid bolus (SBP <90 / MAP <65)",
+    "Cardiogenic shock (hypotensive)",
+    "Septic / distributive shock refractory to fluids",
+    "Neurogenic shock (after volume)"
+   ],
+   "contraindications": [
+    "Known hypersensitivity",
+    "Uncorrected hypovolemia (fluids first — relative)",
+    "Mesenteric or peripheral vascular thrombosis (label)"
+   ],
+   "precautions": [
+    "Extravasation causes tissue necrosis — large, secure vein/IO; report on arrival",
+    "Patients on MAOIs or tricyclics: severe, prolonged hypertension",
+    "Titrate in small steps; reflex bradycardia possible",
+    "Monitor BP every 2–5 min while titrating"
+   ],
+   "side_adverse_effects": [
+    "Hypertension",
+    "Tachy- or bradydysrhythmias",
+    "Headache, anxiety",
+    "Peripheral / mesenteric ischemia"
+   ],
+   "special_considerations": [
+    "Not a CPR drug — epinephrine is the arrest vasopressor; norepinephrine is for a perfusing rhythm",
+    "Preferred over dopamine in many shock states (fewer dysrhythmias) — per local protocol"
+   ]
+  },
+  "digifab": {
+   "name": "Digoxin Immune Fab",
+   "alias": "DigiFab",
+   "module": null,
+   "source": "Antidote — AHA ACLS toxicology (digoxin-specific Fab for life-threatening cardiac glycoside toxicity, Class I) + FDA label dosing. SCOPE: hospital / critical-care transport; not standard NREMT Paramedic formulary.",
+   "classification": [
+    "Antidote",
+    "Digoxin-specific antibody fragment"
+   ],
+   "mechanism_of_action": [
+    "Fab fragments bind free digoxin/digitoxin, pulling it off Na⁺/K⁺-ATPase; complex is renally cleared"
+   ],
+   "dosage": [
+    {
+     "who": "Adult",
+     "t": "Acute ingestion, unknown amount: 10 vials (400 mg) IV over 30 min (bolus if arrest imminent)"
+    },
+    {
+     "who": "Adult",
+     "t": "Chronic toxicity, level unknown: 6 vials (240 mg) IV over 30 min"
+    },
+    {
+     "who": "Adult",
+     "t": "Each 40 mg vial binds ≈0.5 mg digoxin"
+    },
+    {
+     "who": "Pediatric",
+     "t": "Acute ingestion, unknown amount: 10 vials (400 mg) IV over 30 min"
+    },
+    {
+     "who": "Pediatric",
+     "t": "Chronic toxicity: ≤20 kg 1 vial; >20 kg 6 vials IV"
+    }
+   ],
+   "indications": [
+    "Life-threatening digoxin toxicity: ventricular dysrhythmias, symptomatic bradycardia/high-grade block unresponsive to atropine",
+    "Digoxin-associated hyperkalemia (K⁺ >5–5.5) in acute toxicity",
+    "Cardiac arrest from suspected digoxin toxicity"
+   ],
+   "contraindications": [
+    "Known hypersensitivity to ovine (sheep) protein or papain (relative in life-threatening toxicity)"
+   ],
+   "precautions": [
+    "Can unmask heart failure or rapid A-fib previously controlled by digoxin",
+    "K⁺ can drop quickly after Fab — monitor",
+    "Digoxin levels after Fab are unreliable"
+   ],
+   "side_adverse_effects": [
+    "Hypokalemia",
+    "Worsening heart failure",
+    "Rapid ventricular rate in A-fib",
+    "Allergic reaction (rare)"
+   ],
+   "special_considerations": [
+    "SCOPE: not carried by most paramedic services — paramedic care is recognize, support (atropine/TCP for brady), early notification and transport; Fab given in hospital or by critical-care/med control",
+    "Digoxin-toxic strips: PAT with block, accelerated junctional / junctional tach, regularized slow A-fib, bidirectional VT, frequent PVCs/bigeminy, ‘scooped’ ST (dig effect)",
+    "Avoid calcium when digoxin toxicity is suspected (your list: Calcium Chloride contraindication)"
+   ]
   }
  },
  "rhythms": {
@@ -2627,7 +2746,7 @@ window.DRUG_BOX = {
    ]
   },
   "accjx": {
-   "note": "No drug from the box — think digoxin toxicity, ischemia, or post-op. Treat the cause. Suspected digoxin toxicity → med control / Fab at hospital; avoid calcium.",
+   "note": "No drug from the box — think digoxin toxicity, ischemia, or post-op. Treat the cause. Suspected digoxin toxicity → med control / Fab at hospital (see Digoxin Immune Fab); avoid calcium.",
    "drugIndicated": false,
    "drugs": []
   },
@@ -2642,6 +2761,12 @@ window.DRUG_BOX = {
      "doseMatch": "with a pulse"
     },
     {
+     "drug": "digifab",
+     "role": "cond",
+     "why": "Suspected digoxin toxicity with life-threatening dysrhythmia or hyperkalemia — antidote is digoxin-specific Fab (AHA). Hospital / critical-care / med control — not standard paramedic formulary.",
+     "doseMatch": "Acute ingestion|Chronic toxicity"
+    },
+    {
      "drug": "adenosine",
      "role": "avoid",
      "why": "Automatic (not re-entry) junctional focus — adenosine usually won’t convert it."
@@ -2653,7 +2778,7 @@ window.DRUG_BOX = {
     }
    ],
    "also": [
-    "Suspected digoxin toxicity: monitor, 12-lead, check K⁺ at hospital; early hospital notification"
+    "Suspected digoxin toxicity: monitor, 12-lead, check K⁺ at hospital; early notification for Digoxin Immune Fab"
    ]
   },
   "pvc": {
@@ -2693,7 +2818,7 @@ window.DRUG_BOX = {
    ]
   },
   "bigeminy": {
-   "note": "Usually no drug — treat the cause (hypoxia, ischemia, electrolytes, stimulants). Bigeminy in a patient on digoxin → think digoxin toxicity (see jxtach).",
+   "note": "Usually no drug — treat the cause (hypoxia, ischemia, electrolytes, stimulants). Bigeminy in a patient on digoxin → think digoxin toxicity (see jxtach / Digoxin Immune Fab).",
    "drugIndicated": true,
    "drugs": [
     {
@@ -3135,7 +3260,7 @@ window.DRUG_BOX = {
    "also": [
     "High-quality CPR",
     "Defibrillate ASAP, then every 2 min",
-    "After ROSC: SBP <90 / MAP <65 → 1–2 L fluid bolus, then vasopressor infusion (epi / dopamine); 12-lead, SpO₂ 92–98%, avoid hyperventilation",
+    "After ROSC: SBP <90 / MAP <65 → 1–2 L fluid bolus, then vasopressor infusion (norepinephrine / epi / dopamine); 12-lead, SpO₂ 92–98%, avoid hyperventilation",
     "Hypothermic VF: defibrillate; AHA — reasonable to follow standard ACLS drugs/shocks while actively rewarming (some protocols withhold meds <30 °C). Handle gently."
    ],
    "drugs": [
@@ -3194,6 +3319,12 @@ window.DRUG_BOX = {
      "role": "cond",
      "why": "H’s & T’s: correct documented hypoglycemia.",
      "doseMatch": "."
+    },
+    {
+     "drug": "norepinephrine",
+     "role": "cond",
+     "why": "POST-ROSC ONLY — never during CPR. After ROSC with SBP <90 / MAP <65 despite fluid bolus: vasopressor infusion (AHA post–cardiac arrest care: norepinephrine, epinephrine, or dopamine).",
+     "doseMatch": "post-ROSC"
     }
    ]
   },
@@ -3203,7 +3334,7 @@ window.DRUG_BOX = {
    "also": [
     "High-quality CPR",
     "Defibrillate ASAP, then every 2 min",
-    "After ROSC: SBP <90 / MAP <65 → 1–2 L fluid bolus, then vasopressor infusion (epi / dopamine); 12-lead, SpO₂ 92–98%, avoid hyperventilation",
+    "After ROSC: SBP <90 / MAP <65 → 1–2 L fluid bolus, then vasopressor infusion (norepinephrine / epi / dopamine); 12-lead, SpO₂ 92–98%, avoid hyperventilation",
     "Hypothermic arrest: defibrillate; AHA — reasonable to follow standard ACLS drugs/shocks while actively rewarming (some protocols withhold meds <30 °C)."
    ],
    "drugs": [
@@ -3262,6 +3393,12 @@ window.DRUG_BOX = {
      "role": "cond",
      "why": "H’s & T’s: correct documented hypoglycemia.",
      "doseMatch": "."
+    },
+    {
+     "drug": "norepinephrine",
+     "role": "cond",
+     "why": "POST-ROSC ONLY — never during CPR. After ROSC with SBP <90 / MAP <65 despite fluid bolus: vasopressor infusion (AHA post–cardiac arrest care: norepinephrine, epinephrine, or dopamine).",
+     "doseMatch": "post-ROSC"
     }
    ]
   },
@@ -3272,7 +3409,7 @@ window.DRUG_BOX = {
     "High-quality CPR",
     "Do NOT shock",
     "H’s & T’s (hypovolemia, hypoxia, H⁺, K⁺, hypothermia, tension pneumo, tamponade, toxins, thrombosis)",
-    "After ROSC: SBP <90 / MAP <65 → 1–2 L fluid bolus, then vasopressor infusion (epi / dopamine); 12-lead, SpO₂ 92–98%, avoid hyperventilation"
+    "After ROSC: SBP <90 / MAP <65 → 1–2 L fluid bolus, then vasopressor infusion (norepinephrine / epi / dopamine); 12-lead, SpO₂ 92–98%, avoid hyperventilation"
    ],
    "drugs": [
     {
@@ -3310,6 +3447,12 @@ window.DRUG_BOX = {
      "doseMatch": "."
     },
     {
+     "drug": "norepinephrine",
+     "role": "cond",
+     "why": "POST-ROSC ONLY — never during CPR. After ROSC with SBP <90 / MAP <65 despite fluid bolus: vasopressor infusion (AHA post–cardiac arrest care: norepinephrine, epinephrine, or dopamine).",
+     "doseMatch": "post-ROSC"
+    },
+    {
      "drug": "atropine",
      "role": "avoid",
      "why": "No longer recommended for PEA/asystole in current ACLS — your list indicates it for symptomatic bradycardia with a pulse."
@@ -3328,7 +3471,7 @@ window.DRUG_BOX = {
     "High-quality CPR",
     "Do NOT shock",
     "Confirm flatline in a 2nd lead / check gain",
-    "After ROSC: SBP <90 / MAP <65 → 1–2 L fluid bolus, then vasopressor infusion (epi / dopamine); 12-lead, SpO₂ 92–98%, avoid hyperventilation",
+    "After ROSC: SBP <90 / MAP <65 → 1–2 L fluid bolus, then vasopressor infusion (norepinephrine / epi / dopamine); 12-lead, SpO₂ 92–98%, avoid hyperventilation",
     "Hypothermia: check pulse up to 30–45 s; CPR + rewarm — ‘not dead until warm and dead’ (per protocol)."
    ],
    "drugs": [
@@ -3367,6 +3510,12 @@ window.DRUG_BOX = {
      "doseMatch": "."
     },
     {
+     "drug": "norepinephrine",
+     "role": "cond",
+     "why": "POST-ROSC ONLY — never during CPR. After ROSC with SBP <90 / MAP <65 despite fluid bolus: vasopressor infusion (AHA post–cardiac arrest care: norepinephrine, epinephrine, or dopamine).",
+     "doseMatch": "post-ROSC"
+    },
+    {
      "drug": "atropine",
      "role": "avoid",
      "why": "No longer recommended for PEA/asystole in current ACLS — your list indicates it for symptomatic bradycardia with a pulse."
@@ -3390,6 +3539,12 @@ window.DRUG_BOX = {
     "Treat cause; transport to PCI-capable center if STEMI"
    ],
    "drugs": [
+    {
+     "drug": "norepinephrine",
+     "role": "first",
+     "why": "Vasopressor infusion for post-ROSC hypotension after fluids.",
+     "doseMatch": "post-ROSC"
+    },
     {
      "drug": "epinephrine",
      "role": "next",
@@ -3427,6 +3582,12 @@ window.DRUG_BOX = {
    ],
    "drugs": [
     {
+     "drug": "norepinephrine",
+     "role": "first",
+     "why": "Vasopressor/inotrope for hypotensive cardiogenic shock.",
+     "doseMatch": "Hypotension"
+    },
+    {
      "drug": "dopamine",
      "role": "next",
      "why": "Your list: cardiogenic shock.",
@@ -3446,7 +3607,7 @@ window.DRUG_BOX = {
   },
   "digoxintox": {
    "title": "Digoxin toxicity",
-   "source": "AHA ACLS toxicology · NREMT Paramedic scope",
+   "source": "AHA ACLS toxicology + FDA DigiFab label · NREMT Paramedic scope",
    "note": "Strip clues: PAT with block, accelerated junctional / junctional tach, slow regularized A-fib, bidirectional VT, frequent PVCs/bigeminy, high-grade AV block. GI upset, visual changes (yellow-green halos), confusion; hyperkalemia in acute OD.",
    "also": [
     "Paramedic: ABCs, monitor/12-lead, IV, treat symptomatic brady per brady algorithm (atropine, TCP)",
@@ -3459,6 +3620,12 @@ window.DRUG_BOX = {
      "role": "first",
      "why": "Symptomatic bradycardia / AV block from digoxin (vagal effect).",
      "doseMatch": "q3-5min, max 3 mg|0\\.02 mg\\/kg"
+    },
+    {
+     "drug": "digifab",
+     "role": "cond",
+     "why": "Antidote for life-threatening toxicity — hospital / critical care / med control.",
+     "doseMatch": "Acute ingestion|Chronic toxicity"
     },
     {
      "drug": "calciumchloride",

@@ -1,4 +1,4 @@
-const CACHE = 'pharm-hero-pages-12';
+const CACHE = 'pharm-hero-pages-13';
 const PRECACHE = ["./CONTENT.json", "./assets/calc.js", "./assets/dose-engine.js", "./assets/drug-box-designer.js", "./assets/drug-box-ui.js", "./assets/drug-box.js", "./assets/fonts/AllertaStencil-Regular.ttf", "./assets/fonts/Manrope-VariableFont_wght.ttf", "./assets/icons/apple-touch-icon-152.png", "./assets/icons/apple-touch-icon-167.png", "./assets/icons/apple-touch-icon.png", "./assets/icons/ecg-hero-A1.svg", "./assets/icons/ecg-hero.ico", "./assets/icons/favicon-32.png", "./assets/icons/icon-192.png", "./assets/icons/icon-512.png", "./assets/icons/icon-maskable-512.png", "./assets/icons/pharm-hero.png", "./assets/theme-t5.css", "./assets/theme-t5.js", "./css/pharm.css", "./css/shell.css", "./index.html", "./js/access-codes.js", "./js/app.js", "./js/facts.js", "./js/grade.js", "./js/progress.js", "./manifest.webmanifest"];
 
 self.addEventListener('install', function (event) {

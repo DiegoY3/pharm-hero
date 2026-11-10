@@ -121,7 +121,8 @@ const LOOK = {
   albuterol:{f:'ampule',c:'#58d68d',a:'ALB'},      ipratropium:{f:'ampule',c:'#5dade2',a:'ATRV'},
   nitroglycerin:{f:'vial',c:'#ff6b6b',a:'NTG'},    aspirin:{f:'vial',c:'#f5f5f5',a:'ASA'},
   fentanyl:{f:'vial',c:'#e84393',a:'FENT'},        ketamine:{f:'vial',c:'#a29bfe',a:'KET'},
-  ondansetron:{f:'vial',c:'#74b9ff',a:'ZOFRAN'},   diphenhydramine:{f:'vial',c:'#fd79a8',a:'BENA'}
+  ondansetron:{f:'vial',c:'#74b9ff',a:'ZOFRAN'},   diphenhydramine:{f:'vial',c:'#fd79a8',a:'BENA'},
+  norepinephrine:{f:'bag',c:'#5b7cfa',a:'LEVO'},   digifab:{f:'vial',c:'#7bc47f',a:'DIGI'}
 };
 const PAL = ['#ff6b6b','#ffa94d','#ffd43b','#69db7c','#38d9a9','#4dabf7','#748ffc','#da77f2','#f783ac','#a9e34b'];
 function look(k, d){ if (LOOK[k]) return LOOK[k]; let h=0; for (const ch of k) h=(h*31+ch.charCodeAt(0))>>>0;
@@ -352,7 +353,7 @@ function groups(em){
   const all = Object.entries(drugs()).filter(([k,d])=>match(k,d)), G = new Map();
   const add = (g,k)=>{ if (!G.has(g)) G.set(g,[]); G.get(g).push(k); };
   const byName = (a,b)=>drugs()[a].name.localeCompare(drugs()[b].name);
-  if (em==='module'){ all.sort((a,b)=>(a[1].module||99)-(b[1].module||99)||a[1].name.localeCompare(b[1].name)); all.forEach(([k,d])=>add(d.module?'Module '+d.module:'Unscheduled / extra',k)); }
+  if (em==='module'){ all.sort((a,b)=>(a[1].module||99)-(b[1].module||99)||a[1].name.localeCompare(b[1].name)); all.forEach(([k,d])=>add(d.module?'Module '+d.module:'Extra drugs',k)); }
   else if (em==='alpha'){ all.sort((a,b)=>a[1].name.localeCompare(b[1].name)); all.forEach(([k,d])=>add(d.name[0].toUpperCase(),k)); }
   else if (em==='class'){ const ord = BUCKETS.map(b=>b[1]).concat('Other'); all.sort((a,b)=>ord.indexOf(bucket(a[1]))-ord.indexOf(bucket(b[1]))||a[1].name.localeCompare(b[1].name)); all.forEach(([k,d])=>add(bucket(d),k)); }
   else if (em==='cardiac'){ const cs = cardiacSet(); const ord = BUCKETS.map(b=>b[1]).concat('Other');
