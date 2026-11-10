@@ -17,8 +17,20 @@
 <link rel="stylesheet" href="assets/theme-t5.css">
 <link rel="stylesheet" href="css/pharm.css">
 <link rel="stylesheet" href="css/shell.css">
+<script src="js/access-codes.js"></script>
 </head>
 <body class="pharm view-box">
+<div id="unlock-gate" role="dialog" aria-modal="true" aria-labelledby="unlock-title">
+  <div class="unlock-card">
+    <img class="brand-icon" src="assets/icons/pharm-hero.png" alt="">
+    <h1 id="unlock-title">Pharm Hero</h1>
+    <p class="unlock-lead">Enter your access code to unlock this app on this device.</p>
+    <label for="unlock-code">Access code</label>
+    <input id="unlock-code" type="text" inputmode="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done" aria-describedby="unlock-hint">
+    <button type="button" class="unlock-btn" id="unlock-btn">Unlock</button>
+    <p id="unlock-hint" class="unlock-hint" role="alert" hidden></p>
+  </div>
+</div>
 <div class="case" id="box-view">
   <div class="rib left" aria-hidden="true"></div>
   <div class="rib right" aria-hidden="true"></div>
