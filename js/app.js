@@ -381,7 +381,8 @@
       steps: 0,
       learnIds: [],
       test: null,
-      match: null
+      match: null,
+      drugSheetOpen: false
     };
     if (opts.mode === 'learn') initLearn();
     else if (opts.mode === 'test') initTest();
@@ -469,26 +470,22 @@
     if (session.mode === 'match' && session.match) {
       const m = session.match;
       const elapsed = m.done ? m.elapsed : (m.started ? Date.now() - m.started : 0);
-      return '<div class="study-bar"><span>Match</span><span id="match-time">' + fmtTime(elapsed) + '</span><span>Mistakes ' + m.mistakes + '</span><span>Best ' + fmtTime(m.best) + '</span></div>';
+      return '<div class="study-bar"><span id="match-time">' + fmtTime(elapsed) + '</span><span>Mistakes ' + m.mistakes + '</span><span>Best ' + fmtTime(m.best) + '</span></div>';
     }
     if (session.mode === 'test' && session.test) {
       const n = session.test.questions.length;
       const at = session.phase === 'done' ? n : Math.min(session.test.index + 1, n);
-      return '<div class="study-bar"><span>Test <b>' + at + '</b> of ' + n + '</span></div>';
+      return '<div class="study-bar"><span>Question <b>' + at + '</b> of ' + n + '</span></div>';
     }
     if (session.mode === 'learn') {
-      const stage = session.card && session.card.stage === 'mc' ? 'Multiple choice' : 'Type the answer';
-      const left = Math.max(0, session.queue.length - session.pos);
-      return '<div class="study-bar"><span>Learn · ' + stage + '</span><span>' + session.mastered.length + ' mastered · ' + left + ' still in the round</span></div>';
+      const n = Math.max(session.learnIds.length || 0, session.mastered.length + (session.queue ? session.queue.length : 0));
+      const at = Math.min(session.mastered.length + 1, n || 1);
+      return '<div class="study-bar"><span>Question <b>' + (session.phase === 'done' ? n : at) + '</b> of ' + n + '</span></div>';
     }
-    const fact = currentFact();
     const n = session.queue.length;
     const at = Math.min(session.pos + 1, n);
-    const d = fact ? PharmFacts.drug(fact.drug) : null;
-    const who = fact && fact.who ? (fact.who === 'Pediatric' ? 'Peds' : 'Adult') : '';
     const piles = session.piles ? '<span>Know ' + session.piles.know.length + ' · Still learning ' + session.piles.learning.length + '</span>' : '';
-    return '<div class="study-bar"><span>Card <b>' + (session.phase === 'done' ? n : at) + '</b> of ' + n + '</span><span>' +
-      esc(fact ? fact.label : 'Session') + (d ? ' · ' + esc(d.name) : '') + (who ? ' · ' + esc(who) : '') + '</span>' + piles + '</div>';
+    return '<div class="study-bar"><span>Question <b>' + (session.phase === 'done' ? n : at) + '</b> of ' + n + '</span>' + piles + '</div>';
   }
   function drugRail(fact, reveal) {
     const d = PharmFacts.drug(fact.drug);
@@ -511,6 +508,117 @@
       '<p class="note">Say it first. A hint or the source line marks the card assisted and does not move the Leitner box.</p>' +
       '<button type="button" class="ghost" id="bookmark">' + (PharmProgress.isBookmarked(fact.drug) ? '★ Bookmarked' : '☆ Bookmark') + '</button>' +
       '</aside>';
+  }
+
+
+
+  const DRUG_INFO_FIELDS = [
+    ['alias', 'Trade / other names'],
+    ['classification', 'Classification'],
+    ['mechanism_of_action', 'Mechanism of action'],
+    ['indications', 'Indications'],
+    ['contraindications', 'Contraindications'],
+    ['precautions', 'Precautions'],
+    ['dosage', 'Dosage'],
+    ['side_adverse_effects', 'Side / adverse effects'],
+    ['special_considerations', 'Special considerations']
+  ];
+
+  function isFieldRedacted(fact, fieldKey, reveal) {
+    if (reveal || !fact) return false;
+    return fact.field === fieldKey;
+  }
+
+  function redactedHtml(label) {
+    return '<div class="drug-field is-hidden"><p class="kicker">' + esc(label) + '</p><p class="redacted">Hidden until you answer</p></div>';
+  }
+
+  function listHtml(items) {
+    const vals = (items || []).map(function (x) { return String(x == null ? '' : x).trim(); }).filter(Boolean);
+    if (!vals.length) return '';
+    if (vals.length === 1) return '<p>' + esc(vals[0]) + '</p>';
+    return '<ul class="sibs">' + vals.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
+  }
+
+  function dosageLinesHtml(d) {
+    const lines = (d.dosage || []).filter(function (l) { return l && String(l.t || '').trim(); });
+    if (!lines.length) return '';
+    return '<ul class="dose-lines">' + lines.map(function (l) {
+      const peds = l.who === 'Pediatric';
+      return '<li><span class="who-chip ' + (peds ? 'peds' : 'adult') + '">' + (peds ? 'PEDS' : 'ADULT') + '</span><span>' + esc(l.t) + '</span></li>';
+    }).join('') + '</ul>';
+  }
+
+  function showDrugBtnHtml(fact) {
+    if (!fact) return '';
+    const open = !!session.drugSheetOpen;
+    return '<button type="button" class="ghost show-drug-btn" id="show-drug" aria-expanded="' + (open ? 'true' : 'false') + '">' + (open ? 'Hide Drug' : 'Show Drug') + '</button>';
+  }
+
+  function cardHeadHtml(fact, kickerInner, titleInner, extra) {
+    return '<div class="card-head"><div class="card-head-main">' + kickerInner + titleInner + (extra || '') + '</div>' + showDrugBtnHtml(fact) + '</div>';
+  }
+
+  function drugFieldBlock(fact, d, key, label, reveal) {
+    let body = '';
+    if (key === 'alias') body = d.alias ? '<p class="alias">' + esc(d.alias) + '</p>' : '';
+    else if (key === 'dosage') body = dosageLinesHtml(d);
+    else body = listHtml(d[key]);
+    if (isFieldRedacted(fact, key, reveal)) return redactedHtml(label);
+    if (!body) return '';
+    return '<div class="drug-field"><p class="kicker">' + esc(label) + '</p>' + body + '</div>';
+  }
+
+  function drugSheetBody(fact, reveal) {
+    const d = PharmFacts.drug(fact.drug);
+    const tags = [];
+    if (d.module != null) tags.push('Module ' + d.module);
+    if (cardiacHas(fact.drug)) tags.push('Cardiac');
+    if (d.bucket || fact.bucket) tags.push(d.bucket || fact.bucket);
+    const tagHtml = tags.length ? '<p class="drug-tags">' + tags.map(function (t) { return '<span class="tag-chip">' + esc(t) + '</span>'; }).join('') + '</p>' : '';
+    const specs = DRUG_INFO_FIELDS.slice();
+    if (!reveal && fact && fact.field) {
+      specs.sort(function (a, b) {
+        const ar = a[0] === fact.field ? 0 : 1;
+        const br = b[0] === fact.field ? 0 : 1;
+        return ar - br;
+      });
+    }
+    let fields = specs.map(function (spec) { return drugFieldBlock(fact, d, spec[0], spec[1], reveal); }).join('');
+    if (reveal) {
+      const src = PharmFacts.textOf(fact);
+      if (src) fields += '<div class="drug-field"><p class="kicker">Source line</p><p>' + esc(src) + '</p></div>';
+    }
+    return svg(fact.drug) + '<h3 id="drug-sheet-title">' + esc(d.name) + '</h3>' + tagHtml + fields +
+      '<button type="button" class="ghost" id="bookmark">' + (PharmProgress.isBookmarked(fact.drug) ? '★ Bookmarked' : '☆ Bookmark') + '</button>';
+  }
+
+  function drugOverlayHtml(fact, reveal) {
+    if (!fact || !session.drugSheetOpen) return '';
+    return '<div class="drug-sheet-backdrop" id="drug-sheet-backdrop"></div>' +
+      '<aside class="drug-sheet" id="drug-sheet" role="dialog" aria-modal="true" aria-labelledby="drug-sheet-title">' +
+      '<div class="sheet-handle" aria-hidden="true"></div>' +
+      '<header class="drug-sheet-head"><p>Drug info</p><button type="button" class="sheet-close" id="close-drug" aria-label="Close">×</button></header>' +
+      '<div class="drug-sheet-body">' + drugSheetBody(fact, reveal) + '</div></aside>';
+  }
+
+  function studyFrame(kind, cardHtml, fact, reveal) {
+    const open = !!(session.drugSheetOpen && fact);
+    const layout = kind === 'fill' ? 'DB3' : 'DB2';
+    return barHtml() + '<div class="study-body ' + kind + (open ? ' has-sheet' : '') + '" data-layout="' + layout + '">' +
+      cardHtml + drugOverlayHtml(fact, !!reveal) + '</div>';
+  }
+
+  function bindDrugSheet() {
+    const show = document.getElementById('show-drug');
+    if (show) show.onclick = function () {
+      session.drugSheetOpen = !session.drugSheetOpen;
+      renderStudy();
+    };
+    const close = document.getElementById('close-drug');
+    if (close) close.onclick = function () { session.drugSheetOpen = false; renderStudy(); };
+    const back = document.getElementById('drug-sheet-backdrop');
+    if (back) back.onclick = function () { session.drugSheetOpen = false; renderStudy(); };
   }
 
 
@@ -566,16 +674,17 @@
         '<div class="grades"><button type="button" id="grade-again">Still learning<small>Leaves it in that pile</small></button>' +
         '<button type="button" class="got" id="grade-got">Know<small>' + (card.assisted ? 'Assisted — box stays' : 'Moves it to Know') + '</small></button></div>'
       : '<button type="button" class="gold flip" id="show-answer">Flip card</button>';
-    const body = '<section class="card"><p class="kicker tone-' + fact.tone + '">' + esc(fact.label) + esc(which) + '</p>' +
-      svg(fact.drug) + '<h2>' + esc(d.name) + '</h2>' +
-      (fact.field !== 'alias' && d.alias ? '<p class="alias">' + esc(d.alias) + '</p>' : '') +
-      (fact.who ? '<p><span class="who-chip ' + (fact.who === 'Pediatric' ? 'peds' : 'adult') + '">' + (fact.who === 'Pediatric' ? 'PEDS' : 'ADULT') + '</span></p>' : '') +
+    const body = '<section class="card">' + cardHeadHtml(fact,
+      '<p class="kicker tone-' + fact.tone + '">' + esc(fact.label) + esc(which) + '</p>',
+      '<h2>' + esc(d.name) + '</h2>',
+      (fact.who ? '<p><span class="who-chip ' + (fact.who === 'Pediatric' ? 'peds' : 'adult') + '">' + (fact.who === 'Pediatric' ? 'PEDS' : 'ADULT') + '</span></p>' : '')
+    ) +
       (card.updated ? '<p class="updated">This line changed in the drug list. Review it again.</p>' : '') +
       '<p class="prompt">' + (card.revealed ? 'Definition' : 'Tap the card to flip it.') + '</p>' + face +
       '<div class="actions"><button type="button" id="star-card">' + (hard ? '★ Hard' : '☆ Mark hard') + '</button><button type="button" id="shuffle">Shuffle</button><button type="button" id="hint">Hint</button></div>' +
       (card.hint ? '<p class="note" id="hint-text">' + esc(card.hint) + '</p>' : '') +
       '<p class="note">Space flips. Then 1 Still learning, 2 Know.</p></section>';
-    document.getElementById('study').innerHTML = barHtml() + '<div class="study-body flash" data-layout="DB2">' + navHtml() + body + drugRail(fact, card.revealed || card.reference) + '</div>';
+    document.getElementById('study').innerHTML = studyFrame('flash', body, fact, card.revealed || card.reference);
     bindCommon();
     const show = document.getElementById('show-answer');
     if (show) show.onclick = function () { card.revealed = true; renderStudy(); };
@@ -637,13 +746,14 @@
     }
     const actions = card.phase === 'feedback' ? '' :
       '<div class="actions"><button type="button" class="gold" id="check-answer">Check answer</button><button type="button" id="hint">Hint</button><button type="button" id="skip">Skip</button></div>';
-    const spellTitle = session.mode === 'learn' ? 'Learn · type it' : (session.mode === 'spell' ? 'Spell / Write' : 'Fill in the blank');
-    const body = '<section class="card"><p class="kicker tone-' + fact.tone + '">' + spellTitle + ' · ' + esc(fact.label) + '</p>' +
-      '<h2>' + esc(d.name) + '</h2>' +
-      (fact.who ? '<p><span class="who-chip ' + (fact.who === 'Pediatric' ? 'peds' : 'adult') + '">' + (fact.who === 'Pediatric' ? 'PEDS' : 'ADULT') + '</span></p>' : '') +
+    const body = '<section class="card">' + cardHeadHtml(fact,
+      '<p class="kicker tone-' + fact.tone + '">' + esc(fact.label) + '</p>',
+      '<h2>' + esc(d.name) + '</h2>',
+      (fact.who ? '<p><span class="who-chip ' + (fact.who === 'Pediatric' ? 'peds' : 'adult') + '">' + (fact.who === 'Pediatric' ? 'PEDS' : 'ADULT') + '</span></p>' : '')
+    ) +
       '<p class="lede">Complete this line from the drug card. Units can be written out.</p>' +
       prompt + (card.hint ? '<p class="note">' + esc(card.hint) + '</p>' : '') + actions + feedback + '</section>';
-    document.getElementById('study').innerHTML = barHtml() + '<div class="study-body fill" data-layout="DB3">' + body + drugRail(fact, card.phase === 'feedback') + '</div>';
+    document.getElementById('study').innerHTML = studyFrame('fill', body, fact, card.phase === 'feedback');
     bindCommon();
     document.querySelectorAll('.blank').forEach(function (input, idx) {
       input.addEventListener('input', function () {
@@ -737,11 +847,14 @@
     const prompt = session.mode === 'learn'
       ? 'Learn starts with a choice. A correct pick is typed on the next pass.'
       : 'Which of these is listed for this drug? One option matches the card.';
-    const body = '<section class="card"><p class="kicker tone-' + fact.tone + '">' + esc(fact.label) + '</p><h2>' + esc(d.name) + '</h2>' +
-      (fact.who ? '<p><span class="who-chip ' + (fact.who === 'Pediatric' ? 'peds' : 'adult') + '">' + (fact.who === 'Pediatric' ? 'PEDS' : 'ADULT') + '</span></p>' : '') +
+    const body = '<section class="card">' + cardHeadHtml(fact,
+      '<p class="kicker tone-' + fact.tone + '">' + esc(fact.label) + '</p>',
+      '<h2>' + esc(d.name) + '</h2>',
+      (fact.who ? '<p><span class="who-chip ' + (fact.who === 'Pediatric' ? 'peds' : 'adult') + '">' + (fact.who === 'Pediatric' ? 'PEDS' : 'ADULT') + '</span></p>' : '')
+    ) +
       '<p class="prompt">' + prompt + '</p>' +
       '<div class="mcq">' + options + '</div>' + feedback + '</section>';
-    document.getElementById('study').innerHTML = barHtml() + '<div class="study-body quiz" data-layout="DB2">' + navHtml() + body + drugRail(fact, locked) + '</div>';
+    document.getElementById('study').innerHTML = studyFrame('quiz', body, fact, locked);
     bindCommon();
     document.querySelectorAll('.mcq-option').forEach(function (btn) {
       btn.onclick = function () {
@@ -1023,7 +1136,7 @@
         : '<p class="note">Pair the drug with the fact from this filter. The clock starts on the first tile.</p>';
       board = '<section class="card match-board"><p class="kicker">Match</p>' + banner + '<div class="tilegrid">' + tiles + '</div></section>';
     }
-    document.getElementById('study').innerHTML = barHtml() + '<div class="study-body matchplay" data-layout="DB2">' + navHtml() + board + '</div>';
+    document.getElementById('study').innerHTML = studyFrame('matchplay', board, null, false);
     bindCommon();
     document.querySelectorAll('.mtile').forEach(function (btn) {
       btn.onclick = function () { onTileClick(btn.dataset.pair, btn.dataset.side); };
@@ -1037,7 +1150,8 @@
   }
   function renderTest() {
     const q = session.test.questions[session.test.index];
-    const fact = q.factId ? PharmFacts.get(q.factId) : null;
+    // A matching question spans several drugs, so it has no single drug to show.
+    const fact = (q.factId && q.type !== 'match') ? PharmFacts.get(q.factId) : null;
     const d = fact ? PharmFacts.drug(fact.drug) : null;
     const locked = !!q.revealed;
     let body = '';
@@ -1085,9 +1199,13 @@
     } else {
       actions = '<button type="button" class="gold" id="next-card">' + (last ? 'Grade test' : 'Next') + '</button>';
     }
-    const card = '<section class="card"><p class="kicker">' + (fact ? esc(fact.label) : 'Matching') + '</p>' +
-      (d ? '<h2>' + esc(d.name) + '</h2>' : '<h2>Match the pairs</h2>') + body + actions + '</section>';
-    document.getElementById('study').innerHTML = barHtml() + '<div class="study-body quiz" data-layout="DB2">' + navHtml() + card + (fact ? drugRail(fact, locked) : '<aside class="rail"><p class="note">Matching is checked on this screen, then scored with the test.</p></aside>') + '</div>';
+    const card = '<section class="card">' + (fact
+      ? cardHeadHtml(fact, '<p class="kicker tone-' + fact.tone + '">' + esc(fact.label) + '</p>',
+          '<h2>' + esc(d.name) + '</h2>',
+          (fact.who ? '<p><span class="who-chip ' + (fact.who === 'Pediatric' ? 'peds' : 'adult') + '">' + (fact.who === 'Pediatric' ? 'PEDS' : 'ADULT') + '</span></p>' : ''))
+      : '<div class="card-head"><div class="card-head-main"><p class="kicker">Matching</p><h2>Match the pairs</h2></div></div>') +
+      body + actions + '</section>';
+    document.getElementById('study').innerHTML = studyFrame('quiz', card, fact, locked);
     bindCommon();
     document.querySelectorAll('.mcq-option').forEach(function (btn) {
       btn.onclick = function () {
@@ -1193,6 +1311,7 @@
     if (got) got.onclick = function () { advance('got'); };
   }
   function bindCommon() {
+    bindDrugSheet();
     document.querySelectorAll('[data-go]').forEach(function (btn) {
       btn.onclick = function () {
         const go = btn.dataset.go;
@@ -1693,6 +1812,8 @@
     document.getElementById('build-box').onclick = openDesigner;
     document.getElementById('build-from-box').onclick = openDesigner;
     let lastStudyPointer = 0;
+    let lastTouchUpTarget = null;
+    let lastTouchUpAt = 0;
     function studyTarget(e) {
       const node = e.target && e.target.nodeType === 1 ? e.target : (e.target && e.target.parentElement);
       return node || null;
@@ -1747,6 +1868,19 @@
       lastStudyPointer = Date.now();
       onStudyTap(e);
     });
+    // A tap that re-rendered the screen (Start, Next) must not also click whatever now sits under the finger (the new screen's first option).
+    document.addEventListener('pointerup', function (e) {
+      if ((e.pointerType || 'mouse') === 'mouse') { lastTouchUpTarget = null; return; }
+      lastTouchUpTarget = e.target;
+      lastTouchUpAt = Date.now();
+    }, true);
+    document.addEventListener('click', function (e) {
+      if (lastTouchUpTarget && Date.now() - lastTouchUpAt < 700 && e.target.closest && e.target.closest('#study') &&
+          !(lastTouchUpTarget.contains(e.target) || e.target.contains(lastTouchUpTarget))) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    }, true);
     studyPage.addEventListener('click', function (e) {
       if (Date.now() - lastStudyPointer < 700) return;
       onStudyTap(e);
@@ -1842,6 +1976,7 @@
 
     window.PharmHero = {
       start: startSession,
+      render: renderStudy,
       leave: leaveSession,
       openDrug: function (key) {
         if (session) { stopClock(); logIfNeeded(); session = null; }
