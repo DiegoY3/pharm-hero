@@ -1,0 +1,111 @@
+/* ECG Hero — T5 "dark glass" type system (Manrope, bundled offline in assets/fonts).
+ * Scope: Scenario Rush panel (#quiz.rush), Rush chart (#ruChart), ACLS Flow (#quiz.af), Flow tab 2D diagram (#flow2d).
+ * Scale: banner 23 / chart box title 16 / chart body 15 / buttons 17 / body 16 / log 15 / caps labels 12. */
+@font-face{font-family:'Manrope';src:url(fonts/Manrope-VariableFont_wght.ttf) format('truetype');font-weight:200 800;font-display:block}
+/* shared geometry: wider panels so larger type fits; Drug Box section colors */
+:root{--cl:#b48cff;--mo:#4fe3ff;--ds:#6ff0b0;--in:#c6f04f;--ci:#ff6b6b;--pr:#ffb347;--se:#ff8a6b;--sc:#ffe14a;--qw:clamp(440px,29vw,580px);--cw:clamp(360px,24vw,470px)}
+body.mode-rush #quiz{width:var(--qw)!important}
+body.mode-rush #strip{left:calc(var(--qw) + 28px)!important;right:calc(var(--cw) + 28px)!important}
+body.mode-rush #monBtn{left:calc(var(--qw) + 28px)!important}
+#ruChart{width:var(--cw)!important}
+#ruChart .nd{height:auto!important;white-space:normal}
+body.mode-acls #quiz{width:clamp(560px,40vw,800px)!important}
+.tsec{display:flex;align-items:center;gap:8px;margin:12px 0 5px}
+.tsec::after{content:'';flex:1;height:2px;background:currentColor;opacity:.35;border-radius:2px}
+em.dz{font-style:normal}
+#quiz.rush .now span.m em.dz{color:inherit!important;background:none!important;text-shadow:none!important}
+#quiz.af .nd,#ruChart .nd{overflow-wrap:break-word;hyphens:manual}
+#ruChart .nd .tm{float:none!important;display:block;margin-top:2px;opacity:.75}
+
+@media (max-width:1399px){:root{--qw:410px;--cw:330px}}
+body.mode-rush #strip .m4row > .crt{min-width:0}
+/* T5 DARK GLASS — Manrope, frosted translucent panels, subtle gradients, hairline dividers. Scale: banner 23 / chart title 16 / chart body 15 / buttons 17 / body 16 / log 15 / labels 12 caps */
+#quiz.rush,#ruChart,#quiz.af{font-family:'Manrope',sans-serif!important;border-radius:20px!important;backdrop-filter:blur(22px) saturate(1.4);-webkit-backdrop-filter:blur(22px) saturate(1.4);border:1px solid rgba(255,255,255,.14)!important;box-shadow:0 20px 50px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.12)!important}
+#quiz.rush.adult,#ruChart.adult,#quiz.af.adult{background:linear-gradient(160deg,rgba(40,90,130,.42),rgba(8,18,30,.55))!important}
+#quiz.rush.peds,#ruChart.peds{background:linear-gradient(160deg,rgba(150,50,100,.42),rgba(30,8,20,.55))!important}
+#quiz.rush *,#ruChart *,#quiz.af *{font-family:'Manrope',sans-serif}
+#quiz.rush .rh b.tt,#ruChart .hd,#quiz.af .afh b.tt{font:700 15px 'Manrope'!important;letter-spacing:.18em!important;color:rgba(255,255,255,.9)!important}
+#quiz.rush .rh,#ruChart .hd,#quiz.af .afh{border-bottom:1px solid rgba(255,255,255,.08)!important}
+#quiz.rush select,#quiz.rush button,#quiz.af select,#quiz.af button,#quiz.af .tg button{font:600 15px 'Manrope'!important;border-radius:12px!important;background:rgba(255,255,255,.07)!important;border:1px solid rgba(255,255,255,.14)!important}
+#quiz.rush .rh button.pri{background:linear-gradient(135deg,#ff8a5c,#ff5a3d)!important}
+#quiz.rush .pt{font:500 16px/1.5 'Manrope'!important;background:rgba(255,255,255,.05)!important;border:1px solid rgba(255,255,255,.1)!important;border-radius:16px!important;padding:12px 14px!important}
+#quiz.rush .pt b.n{font:800 20px 'Manrope'!important}
+#quiz.rush .pt .tag{font:700 12px 'Manrope'!important;letter-spacing:.1em;border-radius:999px!important;padding:3px 10px!important}
+#quiz.rush .now{border-radius:16px!important;background:linear-gradient(135deg,rgba(255,226,122,.95),rgba(255,190,70,.9))!important;box-shadow:0 10px 30px rgba(255,200,80,.25)!important;padding:14px 16px!important}
+#quiz.rush .now b{font:800 23px/1.15 'Manrope'!important}
+#quiz.rush .now span{font:500 16px/1.4 'Manrope'!important}
+#quiz.rush .now span.m{font:700 16px 'Manrope'!important;font-variant-numeric:tabular-nums;background:rgba(0,0,0,.12)!important;border-radius:10px!important;padding:4px 10px!important}
+#quiz.rush .clk div{font:600 12px 'Manrope'!important;letter-spacing:.14em;background:rgba(255,255,255,.05)!important;border:1px solid rgba(255,255,255,.08);border-radius:14px!important;padding:8px 10px!important}
+#quiz.rush .clk b{font:700 22px 'Manrope'!important;font-variant-numeric:tabular-nums;letter-spacing:0}
+#quiz.rush .ph3 .seg{height:26px!important;border-radius:13px!important;font:700 12px 'Manrope'!important;letter-spacing:.08em}
+#quiz.rush .ph3 .tk{font:500 13px 'Manrope'!important;opacity:.6}
+#quiz.rush .acts{gap:10px!important}
+#quiz.rush .acts button{font:700 17px/1.15 'Manrope'!important;min-height:60px!important;border-radius:16px!important;background:linear-gradient(180deg,rgba(255,255,255,.1),rgba(255,255,255,.03))!important;border:1px solid rgba(255,255,255,.14)!important}
+#quiz.rush .acts button small{font:500 14.5px 'Manrope'!important;opacity:.7}
+#quiz.rush .acts button.sh{background:linear-gradient(135deg,#ff7a3d,#d9400f)!important;border-color:rgba(255,255,255,.3)!important}
+#quiz.rush .acts button.dr{box-shadow:inset 3px 0 0 #ffd75e!important}
+#quiz.rush .log{font:500 15px/1.55 'Manrope'!important;max-height:none!important;border-top:1px solid rgba(255,255,255,.08)!important}
+#quiz.rush .log .t{font:600 13px 'Manrope'!important;font-variant-numeric:tabular-nums;opacity:.5}
+em.dz{font-style:normal;font-weight:800!important;color:#ffe27a;font-variant-numeric:tabular-nums}
+#quiz.rush .now em.dz{color:#3a2400}
+.tsec{font:700 12px 'Manrope';letter-spacing:.2em;text-transform:uppercase}
+.tsec::after{height:1px!important;opacity:.25!important}
+#ruChart .nd{font:600 15px/1.25 'Manrope'!important;border-radius:12px!important;padding:7px 9px!important;background:rgba(255,255,255,.05)!important;border:1px solid rgba(255,255,255,.12)!important;color:rgba(255,255,255,.65)!important}
+#ruChart .nd .no{font:700 11px/18px 'Manrope'!important;min-width:18px!important;height:18px!important;border-radius:9px!important}
+#ruChart .nd .tm{font:600 12px 'Manrope'!important;opacity:.6}
+#ruChart.adult .nd.v{background:linear-gradient(135deg,rgba(74,163,223,.75),rgba(40,110,170,.6))!important;color:#fff!important;border-color:rgba(160,215,255,.5)!important}
+#ruChart.peds .nd.v{background:linear-gradient(135deg,rgba(255,143,192,.75),rgba(200,80,140,.6))!important;color:#fff!important;border-color:rgba(255,200,225,.5)!important}
+#ruChart .lg{font:500 14px 'Manrope'!important;opacity:.6}
+#quiz.af .nd{font:500 15px/1.35 'Manrope'!important;border-radius:14px!important;padding:9px 11px!important;backdrop-filter:blur(6px)}
+#quiz.af .nd b{font:700 16px/1.2 'Manrope'!important}
+#quiz.af .nd ul{font:500 15px/1.35 'Manrope'!important}
+#quiz.af .nd .no{font:700 11px/22px 'Manrope'!important;width:22px!important;height:22px!important}
+#quiz.af .det{font:500 16px/1.55 'Manrope'!important;background:rgba(255,255,255,.05)!important;border:1px solid rgba(255,255,255,.1)!important;border-radius:16px!important}
+#quiz.af .det h4{font:800 20px 'Manrope'!important}
+#quiz.af .det .k{font:700 12px 'Manrope'!important;letter-spacing:.2em!important}
+#quiz.af .det .dose{font:500 16px/1.45 'Manrope'!important;border-radius:12px!important;padding:7px 10px!important}
+#quiz.af .det .calc{font:700 16px 'Manrope'!important;color:#ffe27a}
+#quiz.af .side,#quiz.af .side *{font-size:15px!important}
+#quiz.af .src,#quiz.af label{font:500 15px 'Manrope'!important}
+
+/* ===== Flow tab 2D diagram ===== */
+#flow2d{font-family:'Manrope',sans-serif!important;border-radius:20px!important;background:linear-gradient(160deg,rgba(40,90,130,.42),rgba(8,18,30,.6))!important;backdrop-filter:blur(22px) saturate(1.4);border:1px solid rgba(255,255,255,.14)!important;box-shadow:0 20px 50px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.12)!important}
+#flow2d *{font-family:'Manrope',sans-serif}
+#flow2d text{font-family:'Manrope',sans-serif!important;font-weight:600}
+#flow2d .f2h{font-size:14px!important;border-bottom:1px solid rgba(255,255,255,.08)!important;padding:10px 16px!important}
+#flow2d .f2h .t{font:700 15px 'Manrope'!important;letter-spacing:.18em;text-transform:uppercase}
+#flow2d .chip{font-size:13.5px!important;border-radius:999px!important}
+#flow2d .layseg{border-radius:12px!important;overflow:hidden}
+#flow2d .layseg button{font:600 14px 'Manrope'!important;padding:6px 12px!important}
+#flow2d .ph{font:700 13px 'Manrope'!important;border-radius:10px!important}
+#flow2d .cards{width:clamp(260px,19vw,330px)!important;gap:9px!important;font-size:15px!important;line-height:1.45!important}
+#flow2d .card{background:rgba(255,255,255,.05)!important;border:1px solid rgba(255,255,255,.12)!important;border-left:3px solid var(--c)!important;border-radius:14px!important;padding:9px 11px!important;font-weight:500}
+#flow2d .card b.h{display:block;font:800 13px 'Manrope'!important;letter-spacing:.14em;text-transform:uppercase;padding-bottom:4px;margin-bottom:4px;border-bottom:1px solid rgba(255,255,255,.1)}
+#flow2d .card .r{font-size:13px!important;font-weight:600}
+#flow2d .card b{font-weight:800}
+#flow2d .vnote{font-size:14px!important;line-height:1.45;border-top:1px solid rgba(255,255,255,.1)!important;background:rgba(255,255,255,.04);border-radius:14px;padding:9px 11px!important}
+#flow2d .vnote b{color:var(--sc)}
+#flow2d .foot{font-size:13.5px!important;line-height:1.45;padding:7px 16px 10px!important}
+/* narrow screens: give ACLS Flow room; hyphenate (never hard-break) long words */
+@media (max-width:1399px){ body.mode-acls #quiz{width:640px!important} #quiz.af .nd{padding-left:9px!important;padding-right:9px!important} }
+#quiz.af .nd{hyphens:auto;-webkit-hyphens:auto;overflow-wrap:break-word!important}
+#quiz.af .nd ul{padding-left:16px!important}
+#quiz.af .tg button.on.a{background:#4aa3df!important;color:#04101c!important}
+#quiz.af .tg button.on.p{background:#ff8fc0!important;color:#2a0716!important}
+#flow2d text[font-size="10"],#flow2d text[font-size="12"],#flow2d text[font-size="12.5"]{font-size:15px!important}
+#flow2d text[font-weight="800"]{font-size:18px!important}
+/* narrow screens (all modes): Monitor M5 keys wrap under the screen so the trace never collapses */
+@media (max-width:1399px){
+ #strip .m4row{flex-wrap:wrap}
+ #strip .m4row > .crt{flex:1 1 300px;min-width:0;min-height:170px}
+ #m4keys{order:3;flex:1 1 100%;justify-content:center}
+ #m4keys .col{width:auto;flex:1} #m4keys .col:first-child{flex:.6}
+ #flow2d .cards{width:240px!important}
+}
+@media (max-width:1399px){
+ body.flow2d #strip .m4row{flex-wrap:nowrap}
+ body.flow2d #m5vit{display:none}
+ body.flow2d #m4keys{order:0;flex:none}
+ body.flow2d #m4keys .col{width:112px;flex:none}
+ body.flow2d #m4keys .ud button{width:26px}
+}

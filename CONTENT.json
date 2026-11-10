@@ -1,0 +1,13 @@
+{
+  "app": "Pharm Hero",
+  "snapshot": "ECG Hero drug-box.js copied unchanged",
+  "sha256": {
+    "drug-box.js": "bcb6d94e5b2f2205ae7c0b5f0f89b266846f0153556a33a404c37dcba5ef8a02",
+    "drug-box-ui.js": "6a801b1a127015d9b4c76144b46df3560bd63ad6c47e6d2bbb11a87754bb5998",
+    "theme-t5.css": "d024ad745db630765dd55fc94216c886728c13e62942efb4d3a5b9594d52fd4b",
+    "fonts/Manrope-VariableFont_wght.ttf": "2b7a1ebc80c79246faa1b6e7093c7b91de2a4ceedb9b9a2b2fa05cf9bf8c77cd"
+  },
+  "loaded": ["drug-box.js", "drug-box-ui.js", "drug-box-designer.js", "dose-engine.js", "theme-t5.css", "theme-t5.js"],
+  "bundledNotLoaded": ["calc.js"],
+  "reason": "calc.js is the ECG Hero floating calculator. It is kept in the snapshot and not started, so it does not cover the study desk."
+}

@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Pharm Hero">
+<meta name="theme-color" content="#F4C400">
+<title>Pharm Hero</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon.png">
+<link rel="apple-touch-icon" sizes="167x167" href="assets/icons/apple-touch-icon-167.png">
+<link rel="apple-touch-icon" sizes="152x152" href="assets/icons/apple-touch-icon-152.png">
+<link rel="icon" href="assets/icons/pharm-hero.png">
+<link rel="stylesheet" href="assets/theme-t5.css">
+<link rel="stylesheet" href="css/pharm.css">
+<link rel="stylesheet" href="css/shell.css">
+</head>
+<body class="pharm view-box">
+<div class="case" id="box-view">
+  <div class="rib left" aria-hidden="true"></div>
+  <div class="rib right" aria-hidden="true"></div>
+  <div class="handle" aria-hidden="true"></div>
+  <header class="lid">
+    <img class="brand-icon" src="assets/icons/pharm-hero.png" alt="">
+    <div class="brand-text">
+      <strong>Pharm Hero</strong>
+      <span>Drug Box</span>
+    </div>
+    <input class="find" id="box-find" type="search" placeholder="Search name, class, or indication" aria-label="Search drugs">
+    <div class="lid-actions">
+      <button type="button" class="lid-btn action build" id="build-from-box"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg><span>Build</span></button>
+      <button type="button" class="lid-btn action study" id="study-open"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 6.2C10.4 4.8 8.2 4 6 4H3.5v14H6c2.2 0 4.2.8 6 2.2 1.8-1.4 3.8-2.2 6-2.2h2.5V4H18c-2.2 0-4.4.8-6 2.2z"/><path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M12 6.2v14"/></svg><span>Study</span></button>
+    </div>
+  </header>
+  <div class="views" id="views" role="tablist"></div>
+  <div class="stage">
+    <div class="foam" id="foam"></div>
+    <aside class="wall" id="wall" aria-label="Open drug cards"></aside>
+  </div>
+</div>
+
+<div id="study-page">
+  <header class="study-top">
+    <img class="brand-icon" src="assets/icons/pharm-hero.png" alt="">
+    <div class="brand-text">
+      <strong>Pharm Hero</strong>
+      <span>Study</span>
+    </div>
+    <button type="button" class="ghost" id="build-box">Build your box</button>
+    <button type="button" class="ghost" id="progress-open">Progress</button>
+    <button type="button" class="back" id="back-box">Back to Drug Box</button>
+  </header>
+  <main class="split" id="study-split"></main>
+  <dialog id="progress-dialog">
+    <form method="dialog">
+      <h2>Progress on this computer</h2>
+      <p>Mastery, bookmarks, starred cards, and these filters stay in localStorage under pharmhero.progress.v1. Export before you reset.</p>
+      <div class="row">
+        <button type="button" class="ghost" id="export-progress">Export</button>
+        <button type="button" class="ghost" id="import-progress">Import</button>
+        <button type="button" class="ghost danger" id="reset-progress">Reset</button>
+        <button type="submit" class="ghost" value="close">Close</button>
+      </div>
+      <input type="file" id="import-file" accept="application/json,.json" hidden>
+    </form>
+  </dialog>
+</div>
+
+<header class="session-top" id="session-top">
+  <img class="brand-icon" src="assets/icons/pharm-hero.png" alt="">
+  <div class="brand-text">
+    <strong>Pharm Hero</strong>
+    <span>Study session</span>
+  </div>
+  <div class="scoreboard" id="scoreboard">
+    <span>Score <b id="session-score">0</b></span>
+    <span>Streak <b id="session-streak">0</b></span>
+  </div>
+  <button type="button" class="back" id="end-session">Back to Study</button>
+</header>
+<div id="study"></div>
+<p id="boot-error" role="alert" hidden></p>
+
+<script src="assets/drug-box.js"></script>
+<script src="assets/dose-engine.js"></script>
+<script src="assets/theme-t5.js"></script>
+<script src="assets/drug-box-ui.js"></script>
+<script src="assets/drug-box-designer.js"></script>
+<script src="js/grade.js"></script>
+<script src="js/facts.js"></script>
+<script src="js/progress.js"></script>
+<script src="js/app.js"></script>
+<script>
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  navigator.serviceWorker.register('sw.js');
+}
+</script>
+</body>
+</html>
