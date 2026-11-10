@@ -162,6 +162,31 @@ body.view-build #dbd .dshell {
 .dock { flex: none; display: flex; gap: 8px; padding: 8px 14px 12px; }
 .dock .back { flex: 0 0 112px; }
 .dock .start-go { flex: 1; }
+.wiz-hint {
+  flex: none;
+  margin: 0 14px;
+  min-height: 0;
+  color: #ffe14a;
+  font-size: 14px;
+  font-weight: 800;
+}
+.wiz-hint[hidden] { display: none; }
+#study-page.is-wizard .wizard { overflow: hidden; }
+#study-page.is-wizard .choices { position: relative; z-index: 0; }
+#study-page.is-wizard .dock {
+  position: sticky;
+  bottom: 0;
+  z-index: 40;
+  background: #0e1622;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+}
+#study-page.is-wizard .dock .start-go,
+#study-page.is-wizard .dock .back {
+  position: relative;
+  z-index: 1;
+  touch-action: manipulation;
+}
+.start-go.is-blocked { background: #2a3140; color: #8b97ad; }
 .start-go:disabled { background: #2a3140; color: #8b97ad; }
 .disclaimer {
   flex: none;

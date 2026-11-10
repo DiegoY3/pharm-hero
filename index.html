@@ -94,9 +94,29 @@
 <script src="js/progress.js"></script>
 <script src="js/app.js"></script>
 <script>
-if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-  navigator.serviceWorker.register('sw.js');
-}
+(function () {
+  var host = location.hostname;
+  var nativeApp = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
+  var embedded = nativeApp || location.protocol === 'file:' || host === 'localhost' || host === '127.0.0.1';
+  if (embedded) {
+    if (!('serviceWorker' in navigator)) return;
+    navigator.serviceWorker.getRegistrations().then(function (regs) {
+      return Promise.all(regs.map(function (reg) { return reg.unregister(); }));
+    }).then(function () {
+      if (!window.caches) return null;
+      return caches.keys().then(function (keys) {
+        return Promise.all(keys.map(function (key) { return caches.delete(key); }));
+      });
+    }).then(function () {
+      if (navigator.serviceWorker.controller && !sessionStorage.getItem('ph-sw-cleared')) {
+        sessionStorage.setItem('ph-sw-cleared', '1');
+        location.reload();
+      }
+    }).catch(function () {});
+    return;
+  }
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+})();
 </script>
 </body>
 </html>

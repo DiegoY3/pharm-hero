@@ -1453,17 +1453,11 @@
     }
     const backLabel = wizardStep === 1 ? 'Drug box' : 'Back';
     const primary = wizardStep === 4
-      ? '<button type="button" class="start-go" id="wiz-start"' + (modeOn ? '' : ' disabled') + '>Start</button>'
+      ? '<button type="button" class="start-go" id="wiz-start">Start</button>'
       : '<button type="button" class="start-go" id="wiz-next">Next</button>';
     host.innerHTML = '<div class="wizard"><header class="wiz-top"><img class="brand-icon" src="assets/icons/pharm-hero.png" alt=""><div><strong>Pharm Hero</strong><span>Study</span></div><div class="progress"><div class="dots">' + dots + '</div><span class="count">' + wizardStep + '/4</span></div></header>' +
-      body + '<div class="dock"><button type="button" class="back" id="wiz-back">' + backLabel + '</button>' + primary + '</div></div>';
-    const next = document.getElementById('wiz-next');
-    if (next) {
-      const opts = optsFromUi();
-      const fieldsOk = document.querySelectorAll('#field-slots .on').length > 0 || wizardStep !== 2;
-      const drugsOk = document.querySelectorAll('#subset-slots .on').length > 0 || wizardStep !== 3;
-      next.disabled = (wizardStep === 1 && !opts.mode) || (wizardStep === 2 && !fieldsOk) || (wizardStep === 3 && !drugsOk);
-    }
+      body + '<p class="wiz-hint" id="wiz-hint" hidden></p><div class="dock"><button type="button" class="back" id="wiz-back">' + backLabel + '</button>' + primary + '</div></div>';
+    syncWizardNav();
   }
   function renderStudyHome() {
     const host = document.getElementById('study-split');
@@ -1512,15 +1506,32 @@
     updateDeckNote();
     syncWizardNav();
   }
+  function wizardBlockReason() {
+    const opts = optsFromUi();
+    if ((wizardStep === 1 || wizardStep === 4) && !opts.mode) return 'Pick a mode to continue.';
+    if (wizardStep === 2 && !document.querySelector('#field-slots .on')) return 'Pick at least one field.';
+    if (wizardStep === 3 && !document.querySelector('#subset-slots .on')) return 'Pick at least one drug group.';
+    if (wizardStep === 3 && !factsFor(opts).length) return 'No drugs in that group. Pick another.';
+    if (wizardStep === 4 && !factsFor(opts).length) return 'No drugs in that group. Go back and pick another.';
+    return '';
+  }
+  function wizardHint(text) {
+    const hint = document.getElementById('wiz-hint');
+    if (!hint) return;
+    hint.hidden = !text;
+    hint.textContent = text || '';
+  }
   function syncWizardNav() {
     const next = document.getElementById('wiz-next');
     const start = document.getElementById('wiz-start');
-    if (!next && !start) return;
-    const opts = optsFromUi();
-    const fieldsOk = document.querySelectorAll('#field-slots .on').length > 0;
-    const drugsOk = document.querySelectorAll('#subset-slots .on').length > 0;
-    if (next) next.disabled = (wizardStep === 1 && !opts.mode) || (wizardStep === 2 && !fieldsOk) || (wizardStep === 3 && !drugsOk);
-    if (start) start.disabled = !opts.mode;
+    const reason = wizardBlockReason();
+    [next, start].forEach(function (btn) {
+      if (!btn) return;
+      btn.disabled = false;
+      btn.classList.toggle('is-blocked', !!reason);
+      btn.setAttribute('aria-disabled', reason ? 'true' : 'false');
+    });
+    wizardHint(reason);
   }
   function openDesigner() {
     if (!window.DrugBoxDesigner) return;
@@ -1588,35 +1599,64 @@
     document.getElementById('end-session').onclick = function () { if (session) leaveSession(); else showPage(); };
     document.getElementById('build-box').onclick = openDesigner;
     document.getElementById('build-from-box').onclick = openDesigner;
-    document.getElementById('study-page').addEventListener('click', function (e) {
-      if (e.target.closest('#wiz-back')) {
+    let lastStudyPointer = 0;
+    function studyTarget(e) {
+      const node = e.target && e.target.nodeType === 1 ? e.target : (e.target && e.target.parentElement);
+      return node || null;
+    }
+    function onStudyTap(e) {
+      const target = studyTarget(e);
+      if (!target || !target.closest) return;
+      if (target.closest('#wiz-back')) {
         if (wizardStep <= 1) showBox();
         else { wizardStep -= 1; renderStudyHome(); }
         return;
       }
-      if (e.target.closest('#wiz-next')) {
-        if (e.target.closest('#wiz-next').disabled) return;
+      if (target.closest('#wiz-next') || target.closest('#wiz-start')) {
+        const reason = wizardBlockReason();
+        if (reason) { wizardHint(reason); return; }
+        if (target.closest('#wiz-start')) {
+          const opts = optsFromUi();
+          saveUi();
+          startSession(Object.assign({ mode: opts.mode }, opts));
+          return;
+        }
         wizardStep = Math.min(4, wizardStep + 1);
         saveUi();
         renderStudyHome();
         return;
       }
-      if (e.target.closest('#wiz-start')) {
+      if (target.closest('#start-mode')) {
         const opts = optsFromUi();
         if (!opts.mode) return;
         saveUi();
         startSession(Object.assign({ mode: opts.mode }, opts));
         return;
       }
-      if (e.target.closest('#start-mode')) {
-        const opts = optsFromUi();
-        if (!opts.mode) return;
-        saveUi();
-        startSession(Object.assign({ mode: opts.mode }, opts));
-        return;
-      }
-      const btn = e.target.closest('#study-split .slot, #study-split .mode');
+      const btn = target.closest('#study-split .slot, #study-split .mode');
       if (btn) toggleSlot(btn);
+    }
+    const studyPage = document.getElementById('study-page');
+    let studyDown = null;
+    studyPage.addEventListener('pointerdown', function (e) {
+      studyDown = { x: e.clientX, y: e.clientY, type: e.pointerType || 'mouse' };
+    });
+    studyPage.addEventListener('pointercancel', function () { studyDown = null; });
+    studyPage.addEventListener('pointerup', function (e) {
+      if (!studyDown || studyDown.type === 'mouse' || (e.pointerType || 'mouse') === 'mouse') {
+        studyDown = null;
+        return;
+      }
+      const dx = e.clientX - studyDown.x;
+      const dy = e.clientY - studyDown.y;
+      studyDown = null;
+      if (dx * dx + dy * dy > 144) return;
+      lastStudyPointer = Date.now();
+      onStudyTap(e);
+    });
+    studyPage.addEventListener('click', function (e) {
+      if (Date.now() - lastStudyPointer < 700) return;
+      onStudyTap(e);
     });
     document.getElementById('study-page').addEventListener('change', function (e) {
       if (e.target.id === 'limit-filter') { saveUi(); updateDeckNote(); }
