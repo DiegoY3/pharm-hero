@@ -474,7 +474,7 @@
     if (session.mode === 'test' && session.test) {
       const n = session.test.questions.length;
       const at = session.phase === 'done' ? n : Math.min(session.test.index + 1, n);
-      return '<div class="study-bar"><span>Test <b>' + at + '</b> of ' + n + '</span><span>Answers stay hidden until you finish.</span></div>';
+      return '<div class="study-bar"><span>Test <b>' + at + '</b> of ' + n + '</span></div>';
     }
     if (session.mode === 'learn') {
       const stage = session.card && session.card.stage === 'mc' ? 'Multiple choice' : 'Type the answer';
@@ -511,6 +511,47 @@
       '<p class="note">Say it first. A hint or the source line marks the card assisted and does not move the Leitner box.</p>' +
       '<button type="button" class="ghost" id="bookmark">' + (PharmProgress.isBookmarked(fact.drug) ? '★ Bookmarked' : '☆ Bookmark') + '</button>' +
       '</aside>';
+  }
+
+
+  function markIcon(kind) {
+    const ok = kind === 'ok';
+    const label = ok ? 'Correct' : 'Incorrect';
+    const path = ok
+      ? '<path fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" d="M5 12.5l5 5L20 7"/>'
+      : '<path fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" d="M6 6l12 12M18 6L6 18"/>';
+    return '<span class="ans-mark ' + (ok ? 'ok' : 'bad') + '" title="' + label + '" aria-label="' + label + '"><svg viewBox="0 0 24 24" aria-hidden="true">' + path + '</svg></span>';
+  }
+  function correctRevealHtml(text, extra) {
+    return '<div class="answer-reveal good" role="status">' + markIcon('ok') + '<div><p class="src">Correct answer</p><p class="reveal-text">' + esc(text) + '</p>' + (extra || '') + '</div></div>';
+  }
+  function correctConfirmHtml() {
+    return '<div class="answer-reveal good compact" role="status">' + markIcon('ok') + '<p class="reveal-text">Correct</p></div>';
+  }
+  function mcqButtonsHtml(options, picked, locked) {
+    return (options || []).map(function (o, i) {
+      let cls = 'mcq-option';
+      if (!locked && picked === i) cls += ' on';
+      if (locked && o.correct) cls += ' correct';
+      if (locked && picked === i && !o.correct) cls += ' wrong';
+      let mark = '';
+      if (locked && o.correct) mark = markIcon('ok');
+      else if (locked && picked === i && !o.correct) mark = markIcon('bad');
+      return '<button type="button" class="' + cls + '" data-i="' + i + '"' + (locked ? ' disabled' : '') + '><span class="mcq-label">' + esc(o.text) + '</span>' + mark + '</button>';
+    }).join('');
+  }
+  function typedFieldHtml(tag, id, value, locked, ok, placeholder, extraAttrs) {
+    const cls = 'answer' + (locked ? (ok ? ' good' : ' bad') : '');
+    const ro = locked ? ' readonly' : '';
+    const val = value == null ? '' : String(value);
+    const attrs = (extraAttrs ? ' ' + extraAttrs : '');
+    let field;
+    if (tag === 'textarea') {
+      field = '<textarea class="' + cls + '" id="' + id + '" spellcheck="false" placeholder="' + esc(placeholder || '') + '"' + ro + attrs + '>' + esc(val) + '</textarea>';
+    } else {
+      field = '<input class="' + cls + '" id="' + id + '" autocomplete="off" spellcheck="false" placeholder="' + esc(placeholder || '') + '" value="' + esc(val) + '"' + ro + attrs + '>';
+    }
+    return '<div class="answer-row">' + field + (locked ? markIcon(ok ? 'ok' : 'bad') : '') + '</div>';
   }
 
   function renderFlash(fact) {
@@ -564,29 +605,35 @@
         if (p.type === 'text') return esc(p.text);
         const i = ord++;
         const val = card.values && card.values[i] != null ? card.values[i] : '';
-        return '<input class="blank" data-i="' + i + '" aria-label="Dose blank ' + (i + 1) + '" autocomplete="off" spellcheck="false" value="' + esc(val) + '"' + (card.phase === 'feedback' ? ' readonly' : '') + '>';
+        const blankCls = 'blank' + (card.phase === 'feedback' && card.result && card.result.blanks && card.result.blanks[i] ? (card.result.blanks[i].ok ? ' good' : ' bad') : '');
+        const mark = card.phase === 'feedback' && card.result && card.result.blanks && card.result.blanks[i] ? markIcon(card.result.blanks[i].ok ? 'ok' : 'bad') : '';
+        return '<span class="blank-wrap">' + '<input class="' + blankCls + '" data-i="' + i + '" aria-label="Dose blank ' + (i + 1) + '" autocomplete="off" spellcheck="false" value="' + esc(val) + '"' + (card.phase === 'feedback' ? ' readonly' : '') + '>' + mark + '</span>';
       }).join('') + '</div>';
       if (card.phase !== 'feedback') prompt += keypadHtml();
     } else if (pres.kind === 'siblings') {
       prompt = '<p class="prompt">The other listed items are shown. Type the missing one.</p><ul class="sibs">' +
         pres.siblings.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ul>' +
-        '<input class="answer" id="answer" autocomplete="off" spellcheck="false" placeholder="Missing fact">';
+        typedFieldHtml('input', 'answer', card.yours, card.phase === 'feedback', card.result && card.result.ok, 'Missing fact');
     } else if (pres.kind === 'cloze') {
-      prompt = '<p class="prompt">' + esc(pres.before) + ' <input class="answer" id="answer" autocomplete="off" spellcheck="false" placeholder="Fill the missing words"> ' + esc(pres.after) + '</p>';
+      prompt = '<p class="prompt">' + esc(pres.before) + ' ' + typedFieldHtml('input', 'answer', card.yours, card.phase === 'feedback', card.result && card.result.ok, 'Fill the missing words').replace('class="answer-row"', 'class="answer-row inline"') + ' ' + esc(pres.after) + '</p>';
     } else if (pres.kind === 'alias') {
-      prompt = '<p class="prompt">Type a trade or other name from the card.</p><input class="answer" id="answer" autocomplete="off" spellcheck="false" placeholder="Name">';
+      prompt = '<p class="prompt">Type a trade or other name from the card.</p>' + typedFieldHtml('input', 'answer', card.yours, card.phase === 'feedback', card.result && card.result.ok, 'Name');
     } else {
-      prompt = '<p class="prompt">Type this ' + esc(fact.label.toLowerCase()) + '.</p><textarea class="answer" id="answer" rows="3" spellcheck="false" placeholder="Your recall"></textarea>';
+      prompt = '<p class="prompt">Type this ' + esc(fact.label.toLowerCase()) + '.</p>' + typedFieldHtml('textarea', 'answer', card.yours, card.phase === 'feedback', card.result && card.result.ok, 'Your recall', 'rows="3"');
     }
     let feedback = '';
     if (card.phase === 'feedback' && card.result) {
-      feedback = '<div class="feedback ' + (card.result.ok ? 'good' : 'bad') + '"><p class="src">' + esc(fact.label) + ' · source</p><p>' +
-        (card.result.ok ? (session.mode === 'learn' ? 'Mastered. It leaves the round.' : 'Matched the card.') : (session.mode === 'learn' ? 'Not yet. It goes back to multiple choice.' : 'Not a match for this line.')) +
-        (card.assisted ? ' Assisted — the Leitner box stays put.' : '') + '</p><p>' + esc(pres.full || pres.answer) + '</p>' +
-        (card.result.blanks ? '<p>' + card.result.blanks.map(function (b) {
-          return (b.ok ? '✓ ' : '✗ ') + esc(b.given || 'blank') + ' → ' + esc(b.answer);
-        }).join('<br>') + '</p>' : '') +
-        '<button type="button" class="gold" id="next-card">Next card</button></div>';
+      const learnNote = session.mode === 'learn'
+        ? (card.result.ok ? 'Mastered. It leaves the round.' : 'Not yet. It goes back to multiple choice.')
+        : '';
+      const blankExtra = card.result.blanks && !card.result.ok ? '<p class="blank-lines">' + card.result.blanks.map(function (b) {
+        return '<span class="' + (b.ok ? 'hit' : 'missed') + '">' + (b.ok ? '' : 'Your answer: ' + esc(b.given || 'blank') + ' · ') + 'Correct: ' + esc(b.answer) + '</span>';
+      }).join('<br>') + '</p>' : '';
+      if (card.result.ok) feedback += correctConfirmHtml();
+      else feedback += correctRevealHtml(pres.full || pres.answer, blankExtra);
+      if (learnNote) feedback += '<p class="note">' + learnNote + (card.assisted ? ' Assisted — the Leitner box stays put.' : '') + '</p>';
+      else if (card.assisted) feedback += '<p class="note">Assisted — the Leitner box stays put.</p>';
+      feedback += '<button type="button" class="gold" id="next-card">Next card</button>';
     }
     const actions = card.phase === 'feedback' ? '' :
       '<div class="actions"><button type="button" class="gold" id="check-answer">Check answer</button><button type="button" id="hint">Hint</button><button type="button" id="skip">Skip</button></div>';
@@ -678,18 +725,15 @@
     const card = session.card;
     const d = PharmFacts.drug(fact.drug);
     const locked = card.phase === 'feedback';
-    const options = (card.options || []).map(function (o, i) {
-      let cls = 'mcq-option';
-      if (locked && o.correct) cls += ' correct';
-      if (locked && card.picked === i && !o.correct) cls += ' wrong';
-      return '<button type="button" class="' + cls + '" data-i="' + i + '"' + (locked ? ' disabled' : '') + '>' + esc(o.text) + '</button>';
-    }).join('');
+    const options = mcqButtonsHtml(card.options, card.picked, locked);
     const learnNote = session.mode === 'learn'
       ? (card.result && card.result.ok ? 'Correct. Next you will type this fact.' : 'Not yet. This card comes back as multiple choice.')
       : (card.assisted ? 'Assisted — mastery stays where it is.' : '');
-    const feedback = locked ? '<div class="feedback ' + (card.result && card.result.ok ? 'good' : 'bad') + '"><p class="src">' + esc(fact.label) + ' · source</p><p>' +
-      esc(PharmFacts.textOf(fact)) + '</p>' + (learnNote ? '<p>' + learnNote + '</p>' : '') +
-      '<button type="button" class="gold" id="next-card">Next card</button></div>' : '';
+    const feedback = locked
+      ? ((card.result && card.result.ok) ? correctConfirmHtml() : '') +
+        (learnNote ? '<p class="note">' + learnNote + '</p>' : '') +
+        '<button type="button" class="gold" id="next-card">Next card</button>'
+      : '';
     const prompt = session.mode === 'learn'
       ? 'Learn starts with a choice. A correct pick is typed on the next pass.'
       : 'Which of these is listed for this drug? One option matches the card.';
@@ -950,11 +994,13 @@
     m.mistakes++;
     m.bad = [prev[0] + ':' + prev[1], token];
     renderMatch();
-    setTimeout(function () {
-      if (!session || !session.match) return;
-      session.match.bad = null;
-      renderMatch();
-    }, 420);
+    if (!window.__PH_HOLD_FEEDBACK__) {
+      setTimeout(function () {
+        if (!session || !session.match) return;
+        session.match.bad = null;
+        renderMatch();
+      }, 420);
+    }
   }
   function renderMatch() {
     const m = session.match;
@@ -967,7 +1013,10 @@
         if (m.locked[token]) cls += ' locked';
         if (m.selected === token) cls += ' on';
         if (m.bad && m.bad.indexOf(token) >= 0) cls += ' bad';
-        return '<button type="button" class="' + cls + '" data-pair="' + esc(t.pair) + '" data-side="' + t.side + '">' + esc(t.text) + '</button>';
+        let mark = '';
+        if (m.locked[token]) mark = markIcon('ok');
+        else if (m.bad && m.bad.indexOf(token) >= 0) mark = markIcon('bad');
+        return '<button type="button" class="' + cls + '" data-pair="' + esc(t.pair) + '" data-side="' + t.side + '"><span class="mcq-label">' + esc(t.text) + '</span>' + mark + '</button>';
       }).join('');
       const banner = m.done
         ? '<p class="feedback good">Matched in ' + fmtTime(m.elapsed) + (m.isBest ? ' · new best' : ' · best ' + fmtTime(m.best)) + '. Mistakes ' + m.mistakes + '.</p>'
@@ -980,47 +1029,91 @@
       btn.onclick = function () { onTileClick(btn.dataset.pair, btn.dataset.side); };
     });
   }
+  function revealTestQuestion(q) {
+    q.revealed = true;
+    q.ok = scoreQuestion(q);
+    if (q.type === 'write') q.yours = q.value || q.yours || '';
+    renderTest();
+  }
   function renderTest() {
     const q = session.test.questions[session.test.index];
     const fact = q.factId ? PharmFacts.get(q.factId) : null;
     const d = fact ? PharmFacts.drug(fact.drug) : null;
+    const locked = !!q.revealed;
     let body = '';
     if (q.type === 'mc') {
-      body = '<p class="prompt">Multiple choice</p><div class="mcq">' + q.options.map(function (o, i) {
-        return '<button type="button" class="mcq-option' + (q.picked === i ? ' on' : '') + '" data-i="' + i + '">' + esc(o.text) + '</button>';
-      }).join('') + '</div>';
+      body = '<p class="prompt">Multiple choice</p><div class="mcq">' + mcqButtonsHtml(q.options, q.picked, locked) + '</div>';
     } else if (q.type === 'tf') {
-      body = '<p class="prompt">True or false</p><p class="line">' + esc(q.statement) + '</p><div class="grades"><button type="button" id="tf-true"' + (q.picked === true ? ' class="on"' : '') + '>True</button><button type="button" id="tf-false"' + (q.picked === false ? ' class="on"' : '') + '>False</button></div>';
+      function tfCls(val) {
+        if (locked && val === q.answer) return 'correct';
+        if (locked && q.picked === val && q.picked !== q.answer) return 'wrong';
+        if (!locked && q.picked === val) return 'on';
+        return '';
+      }
+      function tfMark(val) {
+        if (!locked) return '';
+        if (val === q.answer) return markIcon('ok');
+        if (q.picked === val) return markIcon('bad');
+        return '';
+      }
+      body = '<p class="prompt">True or false</p><p class="line">' + esc(q.statement) + '</p><div class="grades tf-grades">' +
+        '<button type="button" id="tf-true"' + (tfCls(true) ? ' class="' + tfCls(true) + '"' : '') + (locked ? ' disabled' : '') + '><span class="mcq-label">True</span>' + tfMark(true) + '</button>' +
+        '<button type="button" id="tf-false"' + (tfCls(false) ? ' class="' + tfCls(false) + '"' : '') + (locked ? ' disabled' : '') + '><span class="mcq-label">False</span>' + tfMark(false) + '</button></div>';
     } else if (q.type === 'match') {
       const opts = q.rights.map(function (r) { return '<option value="' + esc(r) + '">' + esc(r) + '</option>'; }).join('');
       body = '<p class="prompt">Matching · choose the fact for each drug</p>' + q.pairs.map(function (p, i) {
-        return '<label class="matchq"><span>' + esc(p.left) + '</span><select data-i="' + i + '"><option value="">Choose</option>' + opts + '</select></label>';
+        const picked = q.picked[i] || '';
+        const ok = locked && PharmGrade.normalize(picked) === PharmGrade.normalize(p.right);
+        const rowCls = 'matchq' + (locked ? (ok ? ' correct' : ' wrong') : '');
+        const mark = locked ? markIcon(ok ? 'ok' : 'bad') : '';
+        const reveal = locked && !ok ? '<p class="note">' + markIcon('ok') + ' <span class="reveal-text">' + esc(p.right) + '</span></p>' : '';
+        return '<label class="' + rowCls + '"><span>' + esc(p.left) + '</span><span class="pair-ans"><select data-i="' + i + '"' + (locked ? ' disabled' : '') + '><option value="">Choose</option>' + opts + '</select>' + mark + '</span></label>' + reveal;
       }).join('');
     } else {
       const pres = presentation(fact);
       const mask = pres.kind === 'dose' ? '<p class="line">' + pres.parts.map(function (p) { return p.type === 'text' ? esc(p.text) : '____'; }).join('') + '</p>' : '';
-      body = '<p class="prompt">Type the answer</p>' + mask + '<textarea class="answer" id="answer" spellcheck="false" placeholder="Type the fact">' + esc(q.value || '') + '</textarea>';
+      const ok = locked ? !!q.ok : false;
+      body = '<p class="prompt">Type the answer</p>' + mask + typedFieldHtml('textarea', 'answer', q.value || '', locked, ok, 'Type the fact') +
+        (locked && !ok ? correctRevealHtml(PharmFacts.textOf(fact)) : (locked && ok ? correctConfirmHtml() : ''));
+    }
+    const last = session.test.index + 1 >= session.test.questions.length;
+    let actions = '';
+    if (!locked && (q.type === 'write' || q.type === 'match')) {
+      actions = '<button type="button" class="gold" id="check-answer">Check answer</button>';
+    } else if (!locked) {
+      actions = '<p class="note">Pick an answer to check it.</p>';
+    } else {
+      actions = '<button type="button" class="gold" id="next-card">' + (last ? 'Grade test' : 'Next') + '</button>';
     }
     const card = '<section class="card"><p class="kicker">' + (fact ? esc(fact.label) : 'Matching') + '</p>' +
-      (d ? '<h2>' + esc(d.name) + '</h2>' : '<h2>Match the pairs</h2>') + body +
-      '<button type="button" class="gold" id="next-card">' + (session.test.index + 1 >= session.test.questions.length ? 'Grade test' : 'Next') + '</button></section>';
-    document.getElementById('study').innerHTML = barHtml() + '<div class="study-body quiz" data-layout="DB2">' + navHtml() + card + (fact ? drugRail(fact, false) : '<aside class="rail"><p class="note">This question is graded with the rest of the test.</p></aside>') + '</div>';
+      (d ? '<h2>' + esc(d.name) + '</h2>' : '<h2>Match the pairs</h2>') + body + actions + '</section>';
+    document.getElementById('study').innerHTML = barHtml() + '<div class="study-body quiz" data-layout="DB2">' + navHtml() + card + (fact ? drugRail(fact, locked) : '<aside class="rail"><p class="note">Matching is checked on this screen, then scored with the test.</p></aside>') + '</div>';
     bindCommon();
     document.querySelectorAll('.mcq-option').forEach(function (btn) {
-      btn.onclick = function () { q.picked = Number(btn.dataset.i); q.yours = q.options[q.picked].text; renderTest(); };
+      btn.onclick = function () {
+        if (q.revealed) return;
+        q.picked = Number(btn.dataset.i);
+        q.yours = q.options[q.picked].text;
+        revealTestQuestion(q);
+      };
     });
     const yes = document.getElementById('tf-true');
     const no = document.getElementById('tf-false');
-    if (yes) yes.onclick = function () { q.picked = true; q.yours = 'True'; renderTest(); };
-    if (no) no.onclick = function () { q.picked = false; q.yours = 'False'; renderTest(); };
+    if (yes) yes.onclick = function () { if (q.revealed) return; q.picked = true; q.yours = 'True'; revealTestQuestion(q); };
+    if (no) no.onclick = function () { if (q.revealed) return; q.picked = false; q.yours = 'False'; revealTestQuestion(q); };
     document.querySelectorAll('.matchq select').forEach(function (sel) {
       if (q.picked[sel.dataset.i]) sel.value = q.picked[sel.dataset.i];
       sel.onchange = function () { q.picked[sel.dataset.i] = sel.value; };
     });
     const area = document.getElementById('answer');
     if (area) area.oninput = function () { q.value = area.value; q.yours = area.value; };
-    document.getElementById('next-card').onclick = function () {
-      if (q.type === 'write' && area) q.value = area.value;
+    const check = document.getElementById('check-answer');
+    if (check) check.onclick = function () {
+      if (q.type === 'write' && area) { q.value = area.value; q.yours = area.value; }
+      revealTestQuestion(q);
+    };
+    const next = document.getElementById('next-card');
+    if (next) next.onclick = function () {
       if (session.test.index + 1 >= session.test.questions.length) { gradeTest(); renderDone(); }
       else { session.test.index++; renderTest(); }
     };
