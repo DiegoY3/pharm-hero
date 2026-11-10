@@ -121,8 +121,7 @@ const LOOK = {
   albuterol:{f:'ampule',c:'#58d68d',a:'ALB'},      ipratropium:{f:'ampule',c:'#5dade2',a:'ATRV'},
   nitroglycerin:{f:'vial',c:'#ff6b6b',a:'NTG'},    aspirin:{f:'vial',c:'#f5f5f5',a:'ASA'},
   fentanyl:{f:'vial',c:'#e84393',a:'FENT'},        ketamine:{f:'vial',c:'#a29bfe',a:'KET'},
-  ondansetron:{f:'vial',c:'#74b9ff',a:'ZOFRAN'},   diphenhydramine:{f:'vial',c:'#fd79a8',a:'BENA'},
-  norepinephrine:{f:'bag',c:'#5b7cfa',a:'LEVO'},   digifab:{f:'vial',c:'#7bc47f',a:'DIGI'}
+  ondansetron:{f:'vial',c:'#74b9ff',a:'ZOFRAN'},   diphenhydramine:{f:'vial',c:'#fd79a8',a:'BENA'}
 };
 const PAL = ['#ff6b6b','#ffa94d','#ffd43b','#69db7c','#38d9a9','#4dabf7','#748ffc','#da77f2','#f783ac','#a9e34b'];
 function look(k, d){ if (LOOK[k]) return LOOK[k]; let h=0; for (const ch of k) h=(h*31+ch.charCodeAt(0))>>>0;
