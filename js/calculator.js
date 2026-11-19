@@ -11,7 +11,12 @@
     'mcg/min':    { mass: 'mcg', weight: false, timeMin: 1 },
     'mg/min':     { mass: 'mg',  weight: false, timeMin: 1 },
     'mcg/hr':     { mass: 'mcg', weight: false, timeMin: 60 },
-    'mg/hr':      { mass: 'mg',  weight: false, timeMin: 60 }
+    'mg/hr':      { mass: 'mg',  weight: false, timeMin: 60 },
+    'mcg/kg':     { mass: 'mcg', weight: true,  timeMin: null },
+    'mg/kg':      { mass: 'mg',  weight: true,  timeMin: null },
+    'mcg':        { mass: 'mcg', weight: false, timeMin: null },
+    'mg':         { mass: 'mg',  weight: false, timeMin: null },
+    'g':          { mass: 'g',   weight: false, timeMin: null }
   };
 
   function isBlank(v) {
@@ -62,100 +67,260 @@
     return fmtComma(n, a >= 1 ? 8 : 10);
   }
 
+  function parseTimeToMin(raw, unit) {
+    if (isBlank(raw)) return null;
+    var s = String(raw).trim().replace(/,/g, '');
+    var m = s.match(/^([+-]?(?:\d+\.?\d*|\.\d+))\s*(min|mins|minute|minutes|m|hr|hrs|hour|hours|h)?$/i);
+    if (!m) return NaN;
+    var n = Number(m[1]);
+    if (!isFinite(n)) return NaN;
+    var u = (m[2] || unit || 'min').toLowerCase();
+    if (u === 'hr' || u === 'hrs' || u === 'hour' || u === 'hours' || u === 'h') return n * 60;
+    return n;
+  }
+  function defaultTimeForUnit(doseUnit) {
+    var unit = DOSE_UNITS[doseUnit];
+    if (!unit || unit.timeMin == null) return { value: null, unit: 'min', auto: true };
+    return { value: unit.timeMin, unit: 'min', auto: true };
+  }
+  function resolveTime(input, unit) {
+    unit = unit || (input && DOSE_UNITS[input.doseUnit]) || null;
+    var hasKey = !!(input && Object.prototype.hasOwnProperty.call(input, 'timeMin'));
+    var hasTime = !!(input && Object.prototype.hasOwnProperty.call(input, 'time'));
+    if (hasKey) {
+      if (isBlank(input.timeMin)) return { present: false, minutes: null, auto: false };
+      var fromMin = parseTimeToMin(input.timeMin, 'min');
+      if (fromMin == null || !isFinite(fromMin)) return { present: true, minutes: fromMin, auto: false, invalid: true };
+      return { present: true, minutes: fromMin, auto: false };
+    }
+    if (hasTime) {
+      if (isBlank(input.time)) return { present: false, minutes: null, auto: false };
+      var minutes = parseTimeToMin(input.time, (input && input.timeUnit) || 'min');
+      if (minutes == null || !isFinite(minutes)) return { present: true, minutes: minutes, auto: false, invalid: true };
+      return { present: true, minutes: minutes, auto: false };
+    }
+    if (unit && unit.timeMin != null) return { present: true, minutes: unit.timeMin, auto: true };
+    return { present: false, minutes: null, auto: true };
+  }
+  function fmtResult(n) {
+    if (n == null || !isFinite(n)) return '—';
+    var nearest = Math.round(n);
+    if (Math.abs(n - nearest) <= Math.max(1e-8, Math.abs(n) * 1e-10)) return fmtComma(nearest, 0);
+    if (Math.abs(n) >= 1) return fmtComma(Math.round(n * 10) / 10, 1);
+    return fmtComma(n, 4);
+  }
+  function inferResultUnit(f) {
+    if (f.hasDripSet && (f.hasTime || f.dosePerTime)) return 'gtts/min';
+    if (f.hasDripSet && f.hasVolume && !f.hasTime && !f.dosePerTime) return 'gtts';
+    var mass = f.doseMass || 'mg';
+    if (f.hasDose && !f.hasVolume && !f.hasDripSet && !f.hasOnHand) {
+      var label = mass;
+      if (f.dosePerKg && !f.hasWeight) label += '/kg';
+      if (f.dosePerTime && !f.hasTime) label += '/' + f.dosePerTime;
+      return label;
+    }
+    if (f.hasVolume && f.hasTime && !f.hasDripSet && !f.hasDose) return 'mL/min';
+    if (f.hasVolume && f.hasOnHand && f.hasDose && !f.hasDripSet) {
+      if (f.dosePerTime && !f.hasTime) return 'mL/' + f.dosePerTime;
+      return 'mL';
+    }
+    if (f.hasVolume && !f.hasDripSet && !f.hasDose && !f.hasTime && !f.hasOnHand) return 'mL';
+    if (f.hasDripSet) return 'gtts/min';
+    if (f.hasDose) {
+      var leftover = mass;
+      if (f.dosePerKg && !f.hasWeight) leftover += '/kg';
+      if (f.dosePerTime && !f.hasTime) leftover += '/' + f.dosePerTime;
+      return leftover;
+    }
+    return '';
+  }
+
   function computeDrip(input) {
+    input = input || {};
     var unit = DOSE_UNITS[input.doseUnit];
-    if (!unit) return { ok: false, error: 'Pick a dose unit.' };
+    if (!isBlank(input.dose) && !unit) return { ok: false, error: 'Pick a dose unit.' };
+    unit = unit || { mass: 'mcg', weight: false, timeMin: null };
 
-    var missing = [];
-    if (isBlank(input.dose)) missing.push('desired dose');
-    if (unit.weight && isBlank(input.weight)) missing.push('weight');
-    if (isBlank(input.volumeMl)) missing.push('volume');
-    if (isBlank(input.dripSet)) missing.push('drip set');
-    if (isBlank(input.onHand)) missing.push('drug on hand');
-    if (missing.length) {
-      return { ok: false, incomplete: true, error: 'Enter the ' + missing.join(', ') + '.' };
+    function readFactor(raw, label, role) {
+      if (isBlank(raw)) return { present: false, value: 1 };
+      var n = parseNum(raw);
+      if (!isFinite(n)) return { error: 'Use numbers only.' };
+      if (n < 0) return { error: label + ' must be greater than zero.' };
+      if (n === 0 && role === 'den') return { zeroDen: true };
+      if (n === 0) return { error: label + ' must be greater than zero.' };
+      return { present: true, value: n };
     }
 
-    var dose = parseNum(input.dose);
-    var weight = unit.weight ? parseNum(input.weight) : 1;
-    var volumeMl = parseNum(input.volumeMl);
-    var dripSet = parseNum(input.dripSet);
-    var onHand = parseNum(input.onHand);
-    if ([dose, weight, volumeMl, dripSet, onHand].some(function (n) { return !isFinite(n); })) {
+    var doseR = readFactor(input.dose, 'Desired dose', 'num');
+    if (doseR.error) return { ok: false, error: doseR.error };
+
+    var usesWeight = !!unit.weight;
+    var weightR = { present: false, value: 1, kg: null };
+    if (usesWeight) {
+      if (isBlank(input.weight)) {
+        weightR = { present: false, value: 1, kg: null };
+      } else {
+        var w = parseNum(input.weight);
+        if (!isFinite(w)) return { ok: false, error: 'Use numbers only.' };
+        if (w <= 0) return { ok: false, error: 'Weight must be greater than zero.' };
+        var weightKg = toKg(w, input.weightUnit || 'kg');
+        weightR = { present: true, value: weightKg, kg: weightKg, raw: w };
+      }
+    }
+
+    var volR = readFactor(input.volumeMl, 'Volume', 'num');
+    if (volR.error) return { ok: false, error: volR.error };
+    var setR = readFactor(input.dripSet, 'Drip set', 'num');
+    if (setR.error) return { ok: false, error: setR.error };
+    var onR = readFactor(input.onHand, 'Drug on hand', 'den');
+    if (onR.error) return { ok: false, error: onR.error };
+    if (onR.zeroDen) return { ok: false, invalid: true };
+
+    var t = resolveTime(input, unit);
+    var timeR;
+    if (!t.present) {
+      timeR = { present: false, value: 1, minutes: null, auto: !!t.auto };
+    } else if (t.invalid || !isFinite(t.minutes)) {
       return { ok: false, error: 'Use numbers only.' };
-    }
-    if (dose <= 0) return { ok: false, error: 'Desired dose must be greater than zero.' };
-    if (unit.weight && weight <= 0) return { ok: false, error: 'Weight must be greater than zero.' };
-    if (volumeMl <= 0) return { ok: false, error: 'Volume must be greater than zero.' };
-    if (dripSet <= 0) return { ok: false, error: 'Drip set must be greater than zero.' };
-    if (onHand <= 0) return { ok: false, error: 'Drug on hand must be greater than zero.' };
-
-    var timeMin = unit.timeMin;
-    var weightKg = unit.weight ? toKg(weight, input.weightUnit || 'kg') : null;
-    var doseMcg = massToMcg(dose, unit.mass);
-    var onHandMcg = massToMcg(onHand, input.onHandUnit || 'mg');
-    if (!isFinite(doseMcg) || !isFinite(onHandMcg)) {
-      return { ok: false, error: 'That unit is not supported.' };
+    } else if (t.minutes === 0) {
+      return { ok: false, invalid: true };
+    } else if (t.minutes < 0) {
+      return { ok: false, error: 'Time must be greater than zero.' };
+    } else {
+      timeR = { present: true, value: t.minutes, minutes: t.minutes, auto: !!t.auto };
     }
 
-    var weightFactor = unit.weight ? weightKg : 1;
-    var gttsExact = (doseMcg * weightFactor * volumeMl * dripSet) / (onHandMcg * timeMin);
-    if (!isFinite(gttsExact)) return { ok: false, error: 'Could not calculate that combination.' };
-
-    var gtts = Math.round(gttsExact);
-    var mlHr = (gttsExact / dripSet) * 60;
-    var mcgPerMl = onHandMcg / volumeMl;
-    var mgPerMl = mcgPerMl / 1000;
-    var concLabel;
-    if (mgPerMl >= 0.1) concLabel = fmtComma(mgPerMl, 6) + ' mg/mL  (' + fmtComma(mcgPerMl, 4) + ' mcg/mL)';
-    else concLabel = fmtComma(mcgPerMl, 6) + ' mcg/mL';
-
-    var doseSame = doseMcg;
-    var onHandSame = onHandMcg;
-    var sameUnit = 'mcg';
-    if (unit.mass === 'mg' && input.onHandUnit === 'mg') {
-      doseSame = mcgToMass(doseMcg, 'mg');
-      onHandSame = mcgToMass(onHandMcg, 'mg');
-      sameUnit = 'mg';
-    } else if (unit.mass === 'mcg' && (input.onHandUnit === 'mcg' || onHandMcg < 1000)) {
-      sameUnit = 'mcg';
+    var hasNumerator = doseR.present || weightR.present || volR.present || setR.present;
+    var hasProblem = doseR.present || weightR.present || volR.present || onR.present;
+    if (!hasNumerator || !hasProblem) {
+      return { ok: false, incomplete: true, error: 'Enter a value to solve.' };
     }
+
+    var doseMcg = null;
+    var onHandMcg = null;
+    var sameUnit = unit.mass;
+    var doseSame = doseR.present ? doseR.value : null;
+    var onHandSame = onR.present ? onR.value : null;
+    if (doseR.present) {
+      doseMcg = massToMcg(doseR.value, unit.mass);
+      if (!isFinite(doseMcg)) return { ok: false, error: 'That unit is not supported.' };
+    }
+    if (onR.present) {
+      onHandMcg = massToMcg(onR.value, input.onHandUnit || 'mg');
+      if (!isFinite(onHandMcg)) return { ok: false, error: 'That unit is not supported.' };
+      if (doseR.present) {
+        var aligned = alignOnHandToDoseUnit(input.onHand, input.onHandUnit || 'mg', input.doseUnit);
+        if (aligned) {
+          onHandSame = aligned.value;
+          sameUnit = aligned.unit;
+          doseSame = mcgToMass(doseMcg, aligned.unit);
+        }
+      }
+    }
+
+    var numer = 1;
+    if (doseR.present) numer *= (doseR.present && onR.present) ? doseMcg : doseR.value;
+    if (weightR.present) numer *= weightR.value;
+    if (volR.present) numer *= volR.value;
+    if (setR.present) numer *= setR.value;
+    var den = 1;
+    if (onR.present) den *= (doseR.present && isFinite(onHandMcg)) ? onHandMcg : onR.value;
+    if (timeR.present) den *= timeR.value;
+    if (den === 0) return { ok: false, invalid: true };
+    var exact = numer / den;
+    if (!isFinite(exact)) return { ok: false, invalid: true };
+
+    var resultUnit = inferResultUnit({
+      hasDose: doseR.present,
+      hasWeight: weightR.present,
+      hasVolume: volR.present,
+      hasDripSet: setR.present,
+      hasOnHand: onR.present,
+      hasTime: timeR.present,
+      doseMass: unit.mass,
+      dosePerKg: !!unit.weight,
+      dosePerTime: unit.timeMin === 1 ? 'min' : (unit.timeMin === 60 ? 'hr' : null)
+    });
+
+    var mlHr = null;
+    if (setR.present && resultUnit === 'gtts/min') mlHr = (exact / setR.value) * 60;
+    else if (volR.present && timeR.present && !setR.present) mlHr = (volR.value / timeR.value) * 60;
+
+    var mcgPerMl = null;
+    var mgPerMl = null;
+    var concLabel = '—';
+    if (onR.present && volR.present) {
+      mcgPerMl = onHandMcg / volR.value;
+      mgPerMl = mcgPerMl / 1000;
+      if (String(input.onHandUnit || 'mg').toLowerCase() === 'meq') {
+        concLabel = fmtComma(onR.value / volR.value, 6) + ' mEq/mL';
+        mcgPerMl = null;
+        mgPerMl = null;
+      } else if (mgPerMl >= 0.1) {
+        concLabel = fmtComma(mgPerMl, 6) + ' mg/mL  (' + fmtComma(mcgPerMl, 4) + ' mcg/mL)';
+      } else {
+        concLabel = fmtComma(mcgPerMl, 6) + ' mcg/mL';
+      }
+    }
+
+    var gtts = (resultUnit === 'gtts/min' || resultUnit === 'gtts') ? Math.round(exact) : null;
 
     var notes = [];
-    notes.push('Time is ' + timeMin + ' min because the dose is per ' + (timeMin === 1 ? 'minute' : 'hour') + '.');
-    if (unit.weight && input.weightUnit === 'lb') {
-      notes.push(fmtComma(weight, 6) + ' lb ÷ 2.2 = ' + fmtComma(weightKg, 6) + ' kg.');
+    if (timeR.present) {
+      if (timeR.auto) {
+        notes.push('Time is ' + timeR.minutes + ' min because the dose is per ' + (timeR.minutes === 1 ? 'minute' : 'hour') + '.');
+      } else if (input.timeUnit === 'hr' || (input.time && /hr|hour/i.test(String(input.time)))) {
+        var hrs = timeR.minutes / 60;
+        notes.push(fmtComma(hrs, 6) + ' hr = ' + fmtComma(timeR.minutes, 4) + ' min.');
+      } else {
+        notes.push('Time is ' + fmtComma(timeR.minutes, 4) + ' min.');
+      }
     }
-    var origUnit = input.onHandUnit || 'mg';
-    if (origUnit !== sameUnit) {
-      notes.push(fmtComma(onHand, 6) + ' ' + origUnit + ' = ' + fmtComma(onHandSame, 6) + ' ' + sameUnit + ' so it matches the dose unit.');
-    } else if (unit.mass !== origUnit) {
-      notes.push('Dose and drug on hand are both in ' + sameUnit + ' before dividing.');
+    if (usesWeight && weightR.present && input.weightUnit === 'lb') {
+      notes.push(fmtComma(weightR.raw, 6) + ' lb ÷ 2.2 = ' + fmtComma(weightR.kg, 2) + ' kg.');
+    }
+    if (doseR.present && onR.present) {
+      var origUnit = input.onHandUnit || 'mg';
+      if (origUnit !== sameUnit) {
+        notes.push(fmtComma(onR.value, 6) + ' ' + origUnit + ' = ' + fmtComma(onHandSame, 6) + ' ' + sameUnit + ' so it matches the dose unit.');
+      } else if (unit.mass !== origUnit) {
+        notes.push('Dose and drug on hand are both in ' + sameUnit + ' before dividing.');
+      }
+    }
+    if (!doseR.present || (usesWeight && !weightR.present) || !volR.present || !setR.present || !onR.present || !timeR.present) {
+      notes.push('Blank fields are left out of the equation.');
     }
 
-    var numParts = [fmtComma(doseSame, 8)];
-    if (unit.weight) numParts.push(fmtComma(weightKg, 6));
-    numParts.push(fmtComma(volumeMl, 6), fmtComma(dripSet, 6));
-    var denParts = [fmtComma(onHandSame, 8), fmtComma(timeMin, 4)];
+    var numParts = [];
+    if (doseR.present) numParts.push(fmtComma(doseR.present && onR.present ? doseSame : doseR.value, 8));
+    if (weightR.present) numParts.push(fmtComma(weightR.kg, 6));
+    if (volR.present) numParts.push(fmtComma(volR.value, 6));
+    if (setR.present) numParts.push(fmtComma(setR.value, 6));
+    var denParts = [];
+    if (onR.present) denParts.push(fmtComma(doseR.present ? onHandSame : onR.value, 8));
+    if (timeR.present) denParts.push(fmtComma(timeR.minutes, 4));
 
     return {
       ok: true,
-      gtts: gtts,
-      gttsExact: gttsExact,
+      value: exact,
+      display: fmtResult(exact),
+      resultUnit: resultUnit,
+      gtts: gtts != null ? gtts : Math.round(exact),
+      gttsExact: exact,
       mlHr: mlHr,
       mcgPerMl: mcgPerMl,
       mgPerMl: mgPerMl,
       concLabel: concLabel,
-      timeMin: timeMin,
-      weightKg: weightKg,
-      usesWeight: unit.weight,
+      timeMin: timeR.present ? timeR.minutes : null,
+      weightKg: weightR.present ? weightR.kg : null,
+      usesWeight: usesWeight,
       doseMcg: doseMcg,
       onHandMcg: onHandMcg,
       sameUnit: sameUnit,
       notes: notes,
       numerator: numParts.join(' × '),
       denominator: denParts.join(' × '),
-      formula: unit.weight
+      formula: usesWeight
         ? 'gtts/min = (Desired dose × weight (kg) × Volume (mL) × drip set) / (drug on hand × time)'
         : 'gtts/min = (Desired dose × Volume (mL) × drip set) / (drug on hand × time)'
     };
@@ -374,7 +539,7 @@
         label: SLOT_LABELS.weight,
         filled: filledW,
         value: kgVal,
-        display: filledW ? fmtComma(kgVal, 6) : SLOT_LABELS.weight,
+        display: filledW ? fmtComma(kgVal, 2) : SLOT_LABELS.weight,
         focus: focus === 'weight',
         hidden: false
       };
@@ -395,15 +560,22 @@
       time.filled = false;
       timeMin = null;
     } else {
-      time = {
-        id: 'time',
-        label: SLOT_LABELS.time,
-        filled: true,
-        value: timeMin,
-        display: String(timeMin),
-        focus: focus === 'time',
-        hidden: false
-      };
+      var resolved = resolveTime(input, unit);
+      if (resolved.present && isFinite(resolved.minutes)) {
+        time = {
+          id: 'time',
+          label: SLOT_LABELS.time,
+          filled: true,
+          value: resolved.minutes,
+          display: fmtComma(resolved.minutes, 8),
+          focus: focus === 'time',
+          hidden: false
+        };
+        timeMin = resolved.minutes;
+      } else {
+        time = rawSlot('time', '');
+        timeMin = null;
+      }
     }
     var numerator;
     var denominator;
@@ -839,6 +1011,301 @@
     if (recipe.rate.typical != null) out.typical = { value: recipe.rate.typical, unit: recipe.rate.unit };
     return out;
   }
+  function collectUnitHits(text, unitRe) {
+    var hits = [];
+    var used = [];
+    var src = String(text || '');
+    var re = new RegExp('(\\d+(?:\\.\\d+)?)\\s*(?:-|–|to)\\s*(\\d+(?:\\.\\d+)?)\\s*' + unitRe, 'gi');
+    var m;
+    while ((m = re.exec(src))) {
+      var a = parseFloat(m[1]), b = parseFloat(m[2]);
+      hits.push({ min: Math.min(a, b), max: Math.max(a, b), exact: a === b ? a : null });
+      used.push([m.index, m.index + m[0].length]);
+    }
+    re = new RegExp('(\\d+(?:\\.\\d+)?)\\s*' + unitRe, 'gi');
+    while ((m = re.exec(src))) {
+      var covered = used.some(function (sp) { return m.index >= sp[0] && m.index < sp[1]; });
+      if (covered) continue;
+      var v = parseFloat(m[1]);
+      hits.push({ min: v, max: v, exact: v });
+    }
+    return hits;
+  }
+  function stripMixAndMax(text) {
+    return String(text || '')
+      .replace(/\bmax(?:imum)?\s+\d+(?:\.\d+)?\s*(mcg|ug|µg|mg|gm|g|mEq|meq)\b/gi, ' ')
+      .replace(/(\d+(?:\.\d+)?)\s*(?:-|–|to)\s*(\d+(?:\.\d+)?)\s*(mcg|ug|µg|mg|gm|g|mEq|meq)(?:\s*\/\s*kg)?\s*(?:diluted\s+in|in|\/)\s*(\d+(?:\.\d+)?)(?:\s*(?:-|–|to)\s*(\d+(?:\.\d+)?))?\s*ml/gi, ' ')
+      .replace(/(\d+(?:\.\d+)?)\s*(mcg|ug|µg|mg|gm|g|mEq|meq)(?:\s*\/\s*kg)?\s*(?:diluted\s+in|in|\/)\s*(\d+(?:\.\d+)?)(?:\s*(?:-|–|to)\s*(\d+(?:\.\d+)?))?\s*ml/gi, ' ');
+  }
+  function parseMasterDose(text) {
+    var rate = parseDoseRate(text);
+    if (rate && rate.unit) {
+      return {
+        unit: rate.unit,
+        min: rate.min,
+        max: rate.max,
+        exact: rate.exact,
+        typical: rate.typical,
+        multiple: false,
+        kind: 'rate'
+      };
+    }
+    var i, hits, unit, src;
+    var perKg = [
+      { unit: 'mcg/kg', re: '(?:mcg|ug|µg)\\s*\\/\\s*kg(?!\\s*\\/\\s*(?:min|hr))' },
+      { unit: 'mg/kg', re: 'mg\\s*\\/\\s*kg(?!\\s*\\/\\s*(?:min|hr))' }
+    ];
+    for (i = 0; i < perKg.length; i++) {
+      hits = collectUnitHits(text, perKg[i].re);
+      if (!hits.length) continue;
+      if (hits.length > 1) return { unit: perKg[i].unit, min: null, max: null, exact: null, typical: null, multiple: true, kind: 'bolus' };
+      return { unit: perKg[i].unit, min: hits[0].min, max: hits[0].max, exact: hits[0].exact, typical: null, multiple: false, kind: 'bolus' };
+    }
+    src = stripMixAndMax(text);
+    var plain = [
+      { unit: 'mcg', re: '(?:mcg|ug|µg)\\b(?!\\s*\\/)' },
+      { unit: 'mg', re: 'mg\\b(?!\\s*\\/)' },
+      { unit: 'g', re: '(?:^|[^a-zµμ])(?:gm|g)\\b(?!\\s*\\/)' }
+    ];
+    for (i = 0; i < plain.length; i++) {
+      hits = collectUnitHits(src, plain[i].re);
+      if (!hits.length) continue;
+      if (hits.length > 1) return { unit: plain[i].unit, min: null, max: null, exact: null, typical: null, multiple: true, kind: 'bolus' };
+      return { unit: plain[i].unit, min: hits[0].min, max: hits[0].max, exact: hits[0].exact, typical: null, multiple: false, kind: 'bolus' };
+    }
+    return null;
+  }
+  function masterIndicationLabel(text) {
+    var m = String(text || '').match(/^\s*([^:]{2,48}):/);
+    if (m) {
+      var lab = m[1].replace(/\(1mg\/250ml D5W Drip\)/i, '').replace(/\(1:10,000\)|\(1:1,000\)/g, '').trim();
+      lab = lab.replace(/\s+/g, ' ');
+      if (lab && !/^adult$/i.test(lab) && !/^pediatric$/i.test(lab)) return lab;
+    }
+    if (/maintenance infusion/i.test(text)) return 'Maintenance infusion';
+    if (/maintenance/i.test(text) && /mg\/hr|mg\/min/i.test(text)) return 'Maintenance';
+    if (/then infuse/i.test(text)) return 'Infusion after bolus';
+    if (/crush injury/i.test(text)) return 'Crush injury maintenance';
+    if (/no current aha/i.test(text)) return 'Maintenance infusion';
+    if (looksLikeInfusion(text)) return 'Infusion';
+    var short = String(text || '').replace(/\s+/g, ' ').trim();
+    if (short.length > 40) short = short.slice(0, 38) + '…';
+    return short || 'Dose';
+  }
+  function listMasterDrugEntries(drugs) {
+    var list = [];
+    if (!drugs) return list;
+    Object.keys(drugs).forEach(function (key) {
+      var d = drugs[key];
+      if (!d) return;
+      var rows = d.dosage || [];
+      rows.forEach(function (row, index) {
+        var text = String(row && row.t || '');
+        if (!text || skipFillerLine(text)) return;
+        var mix = parseMix(text);
+        var dose = parseMasterDose(text);
+        var hasMix = !!(mix && (mix.amount != null || mix.volume != null));
+        if (!dose && !hasMix) return;
+        var rec = {
+          id: key + '|master|' + String(row.who || '').toLowerCase() + '|' + index,
+          drugKey: key,
+          name: d.name || key,
+          alias: d.alias || '',
+          extra: d.module == null,
+          module: d.module,
+          who: row.who || '',
+          label: masterIndicationLabel(text),
+          text: text,
+          field: fieldPath(key, row.who || '?', index),
+          mix: hasMix ? mix : null,
+          dose: dose,
+          over: parseOverMinutes(text),
+          ageBand: parseAgeBand(text),
+          noRecommendation: /no current aha recommendations/i.test(text)
+        };
+        rec.doseUnit = dose && dose.unit && !dose.multiple ? dose.unit : null;
+        rec.usesWeight = !!(rec.doseUnit && DOSE_UNITS[rec.doseUnit] && DOSE_UNITS[rec.doseUnit].weight) || !!(mix && mix.amountPerKg);
+        list.push(rec);
+      });
+    });
+    return list;
+  }
+  function groupMasterDrugs(entries, drugs) {
+    var groups = [];
+    var map = {};
+    if (drugs) {
+      Object.keys(drugs).forEach(function (key) {
+        var d = drugs[key];
+        if (!d || map[key]) return;
+        map[key] = {
+          drugKey: key,
+          name: d.name || key,
+          alias: d.alias || '',
+          extra: d.module == null,
+          module: d.module,
+          recipes: []
+        };
+        groups.push(map[key]);
+      });
+    }
+    (entries || []).forEach(function (r) {
+      if (!map[r.drugKey]) {
+        map[r.drugKey] = {
+          drugKey: r.drugKey,
+          name: r.name,
+          alias: r.alias,
+          extra: r.extra,
+          module: r.module,
+          recipes: []
+        };
+        groups.push(map[r.drugKey]);
+      }
+      map[r.drugKey].recipes.push(r);
+    });
+    groups.sort(function (a, b) {
+      var am = a.module == null ? 99 : a.module;
+      var bm = b.module == null ? 99 : b.module;
+      if (am !== bm) return am - bm;
+      return String(a.name).localeCompare(String(b.name));
+    });
+    return groups;
+  }
+  function formatDoseHint(dose) {
+    if (!dose || !dose.unit || dose.multiple) return '';
+    if (dose.exact == null && dose.min != null && dose.max != null) {
+      var hint = 'Drug Box: ' + dose.min + (dose.min === dose.max ? '' : '–' + dose.max) + ' ' + dose.unit;
+      if (dose.typical != null) hint += ' (typically starts ' + dose.typical + ')';
+      return hint;
+    }
+    return '';
+  }
+  function formatMixHint(mix) {
+    if (!mix || (mix.amount == null && mix.volume == null)) return '';
+    var amt = '';
+    if (mix.amount != null) {
+      amt = (mix.rangeAmount ? (mix.amount + '–' + mix.amountMax) : String(mix.amount)) +
+        ' ' + mix.amountUnit + (mix.amountPerKg ? '/kg' : '');
+    }
+    var vol = '';
+    if (mix.volume != null) {
+      vol = mix.rangeVolume ? (mix.volume + '–' + mix.volumeMax + ' mL') : (mix.volume + ' mL');
+    }
+    var fluid = mix.fluid ? ' ' + mix.fluid : '';
+    if (amt && vol) return 'Drug Box: ' + amt + ' in ' + vol + fluid;
+    if (amt) return 'Drug Box: ' + amt + fluid;
+    if (vol) return 'Drug Box: ' + vol + fluid;
+    return '';
+  }
+  function masterPrefill(entry) {
+    var out = {
+      dose: null,
+      doseUnit: null,
+      doseHint: '',
+      onHand: null,
+      onHandUnit: null,
+      volumeMl: null,
+      mixHint: '',
+      volumeHint: '',
+      field: entry && entry.field ? entry.field : '',
+      text: entry && entry.text ? entry.text : '',
+      loadedFields: []
+    };
+    if (!entry) return out;
+    var dose = entry.dose || parseMasterDose(entry.text || '');
+    if (dose && dose.unit && !dose.multiple) {
+      out.doseUnit = dose.unit;
+      out.loadedFields.push('doseUnit');
+      if (dose.exact != null) {
+        out.dose = dose.exact;
+        out.loadedFields.push('dose');
+      }
+      out.doseHint = formatDoseHint(dose);
+    }
+    var mix = entry.mix;
+    if (mix) {
+      if (mix.amount != null && !mix.rangeAmount && !mix.amountPerKg) {
+        out.onHand = mix.amount;
+        out.onHandUnit = mix.amountUnit;
+        out.loadedFields.push('onHand');
+        if (mix.amountUnit) out.loadedFields.push('onHandUnit');
+      }
+      if (mix.volume != null && !mix.rangeVolume) {
+        out.volumeMl = mix.volume;
+        out.loadedFields.push('volume');
+      } else if (mix.volume != null && mix.rangeVolume) {
+        out.volumeHint = 'Drug Box: ' + mix.volume + '–' + mix.volumeMax + ' mL';
+      }
+      out.mixHint = formatMixHint(mix);
+    }
+    return out;
+  }
+  function applyMasterDrugChange(prev, prefill) {
+    prev = prev || {};
+    var next = {
+      dose: '',
+      doseUnit: 'mcg/kg/min',
+      volumeMl: '',
+      onHand: '',
+      onHandUnit: 'mg',
+      weight: Object.prototype.hasOwnProperty.call(prev, 'weight') ? prev.weight : '',
+      weightUnit: prev.weightUnit || 'kg',
+      dripSet: Object.prototype.hasOwnProperty.call(prev, 'dripSet') ? prev.dripSet : '60',
+      time: prev.time,
+      timeUnit: prev.timeUnit || 'min',
+      timeManual: !!prev.timeManual,
+      loaded: { dose: false, doseUnit: false, onHand: false, onHandUnit: false, volume: false },
+      loadedValues: { dose: null, doseUnit: null, onHand: null, onHandUnit: null, volume: null },
+      hints: { dose: '', mix: '', volume: '' },
+      spikeUntouched: true
+    };
+    if (prefill) {
+      if (prefill.doseUnit) {
+        next.doseUnit = prefill.doseUnit;
+        next.loaded.doseUnit = true;
+        next.loadedValues.doseUnit = prefill.doseUnit;
+      }
+      if (prefill.dose != null) {
+        next.dose = prefill.dose;
+        next.loaded.dose = true;
+        next.loadedValues.dose = prefill.dose;
+      }
+      if (prefill.onHand != null) {
+        next.onHand = prefill.onHand;
+        next.loaded.onHand = true;
+        next.loadedValues.onHand = prefill.onHand;
+      }
+      if (prefill.onHandUnit) {
+        next.onHandUnit = prefill.onHandUnit;
+        next.loaded.onHandUnit = true;
+        next.loadedValues.onHandUnit = prefill.onHandUnit;
+      }
+      if (prefill.volumeMl != null) {
+        next.volumeMl = prefill.volumeMl;
+        next.loaded.volume = true;
+        next.loadedValues.volume = prefill.volumeMl;
+      }
+      next.hints.dose = prefill.doseHint || '';
+      next.hints.mix = prefill.mixHint || '';
+      next.hints.volume = prefill.volumeHint || '';
+    }
+    if (!next.timeManual) {
+      var auto = defaultTimeForUnit(next.doseUnit);
+      next.time = auto.value == null ? '' : auto.value;
+      next.timeUnit = auto.unit || 'min';
+    }
+    return next;
+  }
+  function masterLoadedTagVisible(field, currentValue, currentUnit, loadedValues) {
+    if (!loadedValues) return false;
+    var n = parseNum(currentValue);
+    if (field === 'dose') return loadedValues.dose != null && isFinite(n) && Number(loadedValues.dose) === Number(n);
+    if (field === 'onHand') {
+      return loadedValues.onHand != null && isFinite(n) && Number(loadedValues.onHand) === Number(n) &&
+        (!loadedValues.onHandUnit || loadedValues.onHandUnit === currentUnit);
+    }
+    if (field === 'volume') return loadedValues.volume != null && isFinite(n) && Number(loadedValues.volume) === Number(n);
+    return false;
+  }
   function concentrationFromAmount(amount, unit, volumeMl) {
     var vol = Number(volumeMl);
     var amt = Number(amount);
@@ -918,10 +1385,90 @@
     };
   }
 
+  function parseBagVolume(raw) {
+    var n = parseNum(raw);
+    return n != null && isFinite(n) && n > 0 ? n : null;
+  }
+  function isPresetBagVolume(n) {
+    return BAG_VOLUMES.indexOf(Number(n)) !== -1;
+  }
+  function computeSpikedBag(input) {
+    input = input || {};
+    var recipe = input.recipe || null;
+    var volumeMl = parseBagVolume(input.volumeMl);
+    var weightRaw = input.weight;
+    var weightKg = null;
+    if (!isBlank(weightRaw)) {
+      var w = parseNum(weightRaw);
+      if (isFinite(w)) weightKg = toKg(w, input.weightUnit || 'kg');
+    }
+    var add = amountToAdd(recipe, volumeMl, weightKg);
+    var dripSet = isBlank(input.dripSet) ? 60 : input.dripSet;
+    var pre = dosePrefill(recipe);
+    var dose = input.dose;
+    var doseUnit = input.doseUnit;
+    if (isBlank(dose) && pre && pre.fill) {
+      dose = pre.value;
+      doseUnit = pre.unit;
+    } else if (isBlank(doseUnit) && pre && pre.unit) {
+      doseUnit = pre.unit;
+    }
+    var onHand = add && add.ok ? add.amount : input.onHand;
+    var onHandUnit = add && add.ok ? add.unit : (input.onHandUnit || (add && add.unit) || 'mg');
+    var timeMin = input.timeMin;
+    if ((timeMin == null || timeMin === '') && recipe && recipe.over && recipe.over.exact != null) {
+      timeMin = recipe.over.exact;
+    }
+    var rate = null;
+    if (recipe && recipe.formulaMode === 'volumeRate') {
+      var mlPerMin = input.mlPerMin != null ? input.mlPerMin : (recipe.rate && recipe.rate.mlPerMin);
+      rate = computeVolumeRate({
+        mlPerMin: mlPerMin,
+        dripSet: dripSet,
+        volumeMl: volumeMl,
+        onHand: onHand,
+        onHandUnit: onHandUnit
+      });
+    } else if (recipe && recipe.formulaMode === 'timed') {
+      rate = computeTimedInfusion({
+        volumeMl: volumeMl,
+        dripSet: dripSet,
+        timeMin: timeMin,
+        onHand: onHand,
+        onHandUnit: onHandUnit
+      });
+    } else if (!isBlank(dose) && doseUnit) {
+      var dripInput = {
+        dose: dose,
+        doseUnit: doseUnit,
+        weight: weightRaw,
+        weightUnit: input.weightUnit || 'kg',
+        volumeMl: volumeMl,
+        dripSet: dripSet,
+        onHand: onHand,
+        onHandUnit: onHandUnit
+      };
+      if (timeMin != null && timeMin !== '') dripInput.timeMin = timeMin;
+      rate = computeDrip(dripInput);
+    }
+    return {
+      amount: add,
+      rate: rate,
+      volumeMl: volumeMl,
+      customVolume: volumeMl != null && !isPresetBagVolume(volumeMl),
+      masterTouched: false
+    };
+  }
+
   var api = {
     LB_PER_KG: LB_PER_KG,
     DOSE_UNITS: DOSE_UNITS,
     computeDrip: computeDrip,
+    parseTimeToMin: parseTimeToMin,
+    defaultTimeForUnit: defaultTimeForUnit,
+    resolveTime: resolveTime,
+    fmtResult: fmtResult,
+    inferResultUnit: inferResultUnit,
     convertAll: convertAll,
     massToMcg: massToMcg,
     toKg: toKg,
@@ -945,10 +1492,22 @@
     groupSpikedBagDrugs: groupSpikedBagDrugs,
     amountToAdd: amountToAdd,
     dosePrefill: dosePrefill,
+    parseMasterDose: parseMasterDose,
+    masterIndicationLabel: masterIndicationLabel,
+    listMasterDrugEntries: listMasterDrugEntries,
+    groupMasterDrugs: groupMasterDrugs,
+    formatDoseHint: formatDoseHint,
+    formatMixHint: formatMixHint,
+    masterPrefill: masterPrefill,
+    applyMasterDrugChange: applyMasterDrugChange,
+    masterLoadedTagVisible: masterLoadedTagVisible,
     computeTimedInfusion: computeTimedInfusion,
     computeVolumeRate: computeVolumeRate,
     concentrationFromAmount: concentrationFromAmount,
-    BAG_VOLUMES: BAG_VOLUMES
+    BAG_VOLUMES: BAG_VOLUMES,
+    parseBagVolume: parseBagVolume,
+    isPresetBagVolume: isPresetBagVolume,
+    computeSpikedBag: computeSpikedBag
   };
 
   if (typeof document === 'undefined') {
@@ -957,6 +1516,11 @@
   }
 
   var weightUnit = 'kg';
+  var timeUnit = 'min';
+  var timeManual = false;
+  var spikeWeightUnit = 'kg';
+  var spikeTimeUnit = 'min';
+  var spikeOpen = true;
   var convCat = 'mass';
   var convLock = false;
   var keys = padState();
@@ -970,7 +1534,17 @@
     lastAutoOnHand: null,
     lastAutoDose: null,
     lastAutoTime: null,
-    applying: false
+    lastAutoSet: null,
+    applying: false,
+    open: true
+  };
+  var dripLastAutoSet = { value: 60, unit: 'gtt' };
+  var master = {
+    drugKey: '',
+    recipeId: null,
+    who: null,
+    pickerOpen: false,
+    loadedValues: { dose: null, doseUnit: null, onHand: null, onHandUnit: null, volume: null }
   };
 
   function escapeHtml(s) {
@@ -1018,9 +1592,46 @@
     return out;
   }
   function spikeWeightKg() {
-    var raw = parseNum($('drip-weight') && $('drip-weight').value);
+    var raw = parseNum($('spike-weight') && $('spike-weight').value);
     if (!isFinite(raw) || raw == null) return null;
-    return toKg(raw, weightUnit);
+    return toKg(raw, spikeWeightUnit);
+  }
+  function setSpikeSelectUnit(selId, unit) {
+    var sel = $(selId);
+    if (!sel || !unit) return;
+    var ok = false;
+    Array.prototype.forEach.call(sel.options, function (opt) {
+      if (opt.value === unit) ok = true;
+    });
+    if (!ok) {
+      var opt = document.createElement('option');
+      opt.value = unit;
+      opt.textContent = unit;
+      sel.appendChild(opt);
+    }
+    sel.value = unit;
+  }
+  function syncSpikeUnitButtons() {
+    var kg = $('spike-unit-kg');
+    var lb = $('spike-unit-lb');
+    if (kg) { kg.classList.toggle('on', spikeWeightUnit === 'kg'); kg.setAttribute('aria-pressed', spikeWeightUnit === 'kg' ? 'true' : 'false'); }
+    if (lb) { lb.classList.toggle('on', spikeWeightUnit === 'lb'); lb.setAttribute('aria-pressed', spikeWeightUnit === 'lb' ? 'true' : 'false'); }
+    var minBtn = $('spike-time-min');
+    var hrBtn = $('spike-time-hr');
+    if (minBtn) { minBtn.classList.toggle('on', spikeTimeUnit === 'min'); minBtn.setAttribute('aria-pressed', spikeTimeUnit === 'min' ? 'true' : 'false'); }
+    if (hrBtn) { hrBtn.classList.toggle('on', spikeTimeUnit === 'hr'); hrBtn.setAttribute('aria-pressed', spikeTimeUnit === 'hr' ? 'true' : 'false'); }
+    var v = String($('spike-set') && $('spike-set').value || '').trim();
+    document.querySelectorAll('.spike-set').forEach(function (btn) {
+      btn.classList.toggle('on', btn.getAttribute('data-gtt') === v);
+    });
+  }
+  function setSpikeOpen(open) {
+    spikeOpen = open != null ? !!open : !spikeOpen;
+    spike.open = spikeOpen;
+    var box = $('spike-box');
+    var toggle = $('spike-toggle');
+    if (box) box.classList.toggle('collapsed', !spikeOpen);
+    if (toggle) toggle.setAttribute('aria-expanded', spikeOpen ? 'true' : 'false');
   }
   function setOnHandSelectUnit(unit) {
     var sel = $('drip-onhand-unit');
@@ -1074,11 +1685,8 @@
   }
 
   function dripInputs() {
-    var rec = currentSpikeRecipe();
-    var mode = rec ? rec.formulaMode : 'master';
     var timeVal = $('drip-time') ? $('drip-time').value : '';
-    var timeNum = parseNum(timeVal);
-    if (!isFinite(timeNum)) timeNum = rec && rec.over && rec.over.exact != null ? rec.over.exact : null;
+    var timeNum = parseTimeToMin(timeVal, timeUnit);
     return {
       dose: $('drip-dose').value,
       doseUnit: $('drip-dose-unit').value,
@@ -1088,51 +1696,64 @@
       dripSet: $('drip-set').value,
       onHand: $('drip-onhand').value,
       onHandUnit: $('drip-onhand-unit').value,
-      formulaMode: mode,
-      timeMode: mode === 'timed' ? 'infusion' : 'unit',
-      timeMin: mode === 'timed' ? timeNum : undefined,
-      mlPerMin: rec && rec.rate && rec.rate.mlPerMin != null ? rec.rate.mlPerMin : undefined,
+      formulaMode: 'master',
+      timeMin: timeNum,
+      timeUnit: timeUnit,
       focus: focusSlot
     };
   }
+  function syncTimeUnitButtons() {
+    var minBtn = $('drip-time-min');
+    var hrBtn = $('drip-time-hr');
+    if (minBtn) { minBtn.classList.toggle('on', timeUnit === 'min'); minBtn.setAttribute('aria-pressed', timeUnit === 'min' ? 'true' : 'false'); }
+    if (hrBtn) { hrBtn.classList.toggle('on', timeUnit === 'hr'); hrBtn.setAttribute('aria-pressed', timeUnit === 'hr' ? 'true' : 'false'); }
+  }
+  function applyAutoTime() {
+    var auto = defaultTimeForUnit($('drip-dose-unit') && $('drip-dose-unit').value);
+    timeUnit = 'min';
+    var timeEl = $('drip-time');
+    if (timeEl) timeEl.value = auto.value == null ? '' : String(auto.value);
+    timeManual = false;
+    syncTimeUnitButtons();
+  }
+  function syncDefaultDripSet(unit) {
+    var setEl = $('drip-set');
+    if (!setEl) return;
+    var isBolus = !unit || unit.timeMin == null;
+    if (isBolus) {
+      if (isBlank(setEl.value) || sameAuto(dripLastAutoSet, setEl.value, 'gtt') || String(setEl.value).trim() === '60') {
+        var volBlank = !$('drip-volume') || isBlank($('drip-volume').value);
+        var onBlank = !$('drip-onhand') || isBlank($('drip-onhand').value);
+        if (volBlank && onBlank) {
+          setEl.value = '';
+          dripLastAutoSet = { value: 60, unit: 'gtt' };
+        }
+      }
+    } else if (isBlank(setEl.value)) {
+      setEl.value = '60';
+      dripLastAutoSet = { value: 60, unit: 'gtt' };
+    }
+  }
   function syncTimeAndWeight() {
-    var rec = currentSpikeRecipe();
-    var unit = DOSE_UNITS[$('drip-dose-unit').value] || DOSE_UNITS['mcg/kg/min'];
-    var usesWeight = rec ? rec.usesWeight : !!unit.weight;
+    var unit = DOSE_UNITS[$('drip-dose-unit') && $('drip-dose-unit').value] || DOSE_UNITS['mcg/kg/min'];
+    var usesWeight = !!unit.weight;
     var wrap = $('drip-weight-wrap');
     if (wrap) wrap.hidden = !usesWeight;
     if ($('drip-weight')) $('drip-weight').disabled = !usesWeight;
     var timeEl = $('drip-time');
     var note = $('drip-time-note');
-    if (rec && rec.formulaMode === 'timed') {
-      if (timeEl) timeEl.readOnly = false;
-      if (rec.over && rec.over.exact != null) {
-        if (timeEl && (isBlank(timeEl.value) || sameAuto(spike.lastAutoTime, parseNum(timeEl.value), 'min') || /min/.test(timeEl.value))) {
-          timeEl.value = String(rec.over.exact);
-          spike.lastAutoTime = { value: rec.over.exact, unit: 'min' };
-        }
-        if (note) note.textContent = 'from Drug Box';
-      } else if (rec.over && rec.over.range) {
-        if (timeEl && (sameAuto(spike.lastAutoTime, parseNum(timeEl.value), 'min') || /min/.test(String(timeEl.value)))) {
-          timeEl.value = '';
-          spike.lastAutoTime = null;
-        }
-        if (note) note.textContent = 'Drug Box: ' + rec.over.min + '–' + rec.over.max + ' min';
-      } else if (note) {
-        note.textContent = 'infusion time';
-      }
-    } else if (rec && rec.formulaMode === 'volumeRate') {
-      if (timeEl) {
-        timeEl.readOnly = true;
-        timeEl.value = '';
-      }
-      if (note) note.textContent = rec.rate && rec.rate.mlPerMin != null ? (rec.rate.mlPerMin + ' mL/min') : '';
-    } else {
-      if (timeEl) timeEl.readOnly = true;
-      var label = unit.timeMin === 1 ? '1 min' : '60 min';
-      if (timeEl) timeEl.value = label;
-      if (note) note.textContent = unit.timeMin === 1 ? 'per minute' : 'per hour';
+    if (timeEl && document.activeElement === timeEl) timeManual = true;
+    if (timeEl) timeEl.readOnly = false;
+    if (!timeManual) applyAutoTime();
+    else syncTimeUnitButtons();
+    if (note) {
+      if (timeEl && isBlank(timeEl.value)) note.textContent = 'enter any time';
+      else if (timeManual) note.textContent = timeUnit === 'hr' ? 'custom hours' : 'custom';
+      else if (unit.timeMin === 1) note.textContent = 'per minute';
+      else if (unit.timeMin === 60) note.textContent = 'per hour';
+      else note.textContent = 'enter any time';
     }
+    if (!timeManual) syncDefaultDripSet(unit);
   }
   function syncSetButtons() {
     var v = String($('drip-set').value).trim();
@@ -1166,46 +1787,21 @@
     frac.innerHTML = html;
   }
   function renderDrip() {
-    if (!spike.applying) syncSpikeChrome();
     syncTimeAndWeight();
     syncSetButtons();
+    renderMasterChrome();
     renderFormula();
-    var rec = currentSpikeRecipe();
     var input = dripInputs();
-    var out;
-    if (rec && rec.formulaMode === 'volumeRate') out = computeVolumeRate(input);
-    else if (rec && rec.formulaMode === 'timed') out = computeTimedInfusion(input);
-    else out = computeDrip(input);
+    var out = computeDrip(input);
     var box = $('drip-out');
     var err = $('drip-error');
     var notes = $('drip-notes');
-    var addRow = $('drip-add-row');
-    var addVal = $('drip-add');
-    var addInfo = spikeAmountInfo();
-    var showAdd = !!(addInfo && (addInfo.ok || addInfo.note));
-    var concOnly = null;
-    if ((!out || !out.ok || !out.concLabel || out.concLabel === '—') && addInfo && addInfo.ok) {
-      concOnly = concentrationFromAmount(addInfo.amount, addInfo.unit, input.volumeMl);
-    }
     if (!out || !out.ok) {
-      var canShowPartial = showAdd || (concOnly && concOnly.concLabel);
-      if (box) box.hidden = !canShowPartial;
-      if (canShowPartial) {
-        if ($('drip-gtts')) $('drip-gtts').textContent = '—';
-        if ($('drip-exact')) $('drip-exact').textContent = '';
-        if ($('drip-mlhr')) $('drip-mlhr').textContent = '—';
-        if ($('drip-conc')) $('drip-conc').textContent = concOnly ? concOnly.concLabel : '—';
-      }
-      if (addRow) addRow.hidden = !showAdd;
-      if (addVal && addInfo) addVal.textContent = addInfo.ok ? (fmtComma(addInfo.amount, 6) + ' ' + addInfo.unit) : (addInfo.manual ? 'Enter manually' : '—');
-      if (notes) {
-        var partialNotes = [];
-        if (addInfo && addInfo.note) partialNotes.push(addInfo.note);
-        notes.innerHTML = partialNotes.map(function (n) { return '<p>' + escapeHtml(n) + '</p>'; }).join('');
-        notes.hidden = !partialNotes.length;
-      }
-      fillSpikeRate(out, concOnly);
-      if (out && out.incomplete) {
+      if (box) box.hidden = true;
+      if ($('drip-gtts')) $('drip-gtts').textContent = '—';
+      if ($('drip-unit')) $('drip-unit').textContent = '';
+      if ($('fx-kicker')) $('fx-kicker').textContent = '';
+      if (out && (out.incomplete || out.invalid)) {
         if (err) { err.hidden = true; err.textContent = ''; }
       } else if (out && out.error) {
         if (err) { err.hidden = false; err.textContent = out.error; }
@@ -1214,22 +1810,43 @@
     }
     if (err) { err.hidden = true; err.textContent = ''; }
     if (box) box.hidden = false;
-    $('drip-gtts').textContent = fmtComma(out.gtts, 0);
-    var exact = fmtComma(out.gttsExact, 6);
-    $('drip-exact').textContent = exact === String(out.gtts)
-      ? 'Exactly ' + exact + ' gtts/min'
-      : 'Exact ' + exact + ' gtts/min, rounded to the nearest drop';
-    $('drip-mlhr').textContent = fmtComma(out.mlHr, 4);
-    $('drip-conc').textContent = out.concLabel;
-    if (addRow) addRow.hidden = !showAdd;
-    if (addVal && addInfo) addVal.textContent = addInfo.ok ? (fmtComma(addInfo.amount, 6) + ' ' + addInfo.unit) : (addInfo.manual ? 'Enter manually' : '—');
+    var unitLabel = out.resultUnit || '';
+    var mainVal = out.display || fmtResult(out.value != null ? out.value : out.gttsExact);
+    if ($('drip-gtts')) $('drip-gtts').textContent = mainVal;
+    if ($('drip-unit')) $('drip-unit').textContent = unitLabel;
+    var kicker = $('fx-kicker');
+    if (kicker) kicker.textContent = unitLabel ? unitLabel + ' =' : '';
+    var exactLine = '';
+    if (unitLabel === 'gtts/min' && out.gtts != null && isFinite(out.gttsExact)) {
+      var exact = fmtComma(out.gttsExact, 6);
+      exactLine = exact === String(out.gtts)
+        ? 'Exactly ' + exact + ' gtts/min'
+        : 'Exact ' + exact + ' gtts/min, rounds to ' + fmtComma(out.gtts, 0) + ' drops';
+    } else if (out.value != null && isFinite(out.value)) {
+      exactLine = 'Exact ' + fmtComma(out.value, 6) + (unitLabel ? ' ' + unitLabel : '');
+    }
+    if ($('drip-exact')) $('drip-exact').textContent = exactLine;
+    var mlRow = $('drip-mlhr-row');
+    if (out.mlHr != null && isFinite(out.mlHr)) {
+      if ($('drip-mlhr')) $('drip-mlhr').textContent = fmtComma(out.mlHr, 4);
+      if (mlRow) mlRow.hidden = false;
+    } else {
+      if ($('drip-mlhr')) $('drip-mlhr').textContent = '—';
+      if (mlRow) mlRow.hidden = true;
+    }
+    var concRow = $('drip-conc-row');
+    if (out.concLabel && out.concLabel !== '—') {
+      if ($('drip-conc')) $('drip-conc').textContent = out.concLabel;
+      if (concRow) concRow.hidden = false;
+    } else {
+      if ($('drip-conc')) $('drip-conc').textContent = '—';
+      if (concRow) concRow.hidden = true;
+    }
     if (notes) {
       var allNotes = (out.notes || []).slice();
-      if (addInfo && addInfo.note) allNotes.unshift(addInfo.note);
       notes.innerHTML = allNotes.map(function (n) { return '<p>' + escapeHtml(n) + '</p>'; }).join('');
       notes.hidden = !allNotes.length;
     }
-    fillSpikeRate(out);
   }
   function slotFromEventTarget(el) {
     if (!el || !el.closest) return null;
@@ -1256,19 +1873,42 @@
 
 
 
+  function spikeInputs() {
+    var rec = currentSpikeRecipe();
+    var vol = $('spike-volume') ? $('spike-volume').value : '';
+    var timeVal = $('spike-time') ? $('spike-time').value : '';
+    var timeNum = parseTimeToMin(timeVal, spikeTimeUnit);
+    return {
+      recipe: rec,
+      volumeMl: vol,
+      weight: $('spike-weight') ? $('spike-weight').value : '',
+      weightUnit: spikeWeightUnit,
+      dripSet: $('spike-set') ? $('spike-set').value : 60,
+      dose: $('spike-dose') ? $('spike-dose').value : '',
+      doseUnit: $('spike-dose-unit') ? $('spike-dose-unit').value : '',
+      timeMin: timeNum,
+      mlPerMin: rec && rec.rate && rec.rate.mlPerMin != null ? rec.rate.mlPerMin : undefined
+    };
+  }
   function fillSpikeRate(out, concFallback) {
     var extra = $('spike-add-extra');
     var hasRate = out && out.ok;
+    var unitLabel = (out && out.resultUnit) || (hasRate ? 'gtts/min' : '');
     var conc = (out && out.ok && out.concLabel && out.concLabel !== '—') ? out.concLabel : (concFallback && concFallback.concLabel);
-    if ($('spike-gtts')) $('spike-gtts').textContent = hasRate ? fmtComma(out.gtts, 0) : '—';
-    if ($('spike-mlhr')) $('spike-mlhr').textContent = hasRate ? fmtComma(out.mlHr, 4) : '—';
+    var gttsText = '—';
+    if (hasRate) {
+      if (out.display) gttsText = out.display + (unitLabel && unitLabel !== 'gtts/min' ? ' ' + unitLabel : '');
+      else if (out.gtts != null) gttsText = fmtComma(out.gtts, 0);
+    }
+    if ($('spike-gtts')) $('spike-gtts').textContent = gttsText;
+    if ($('spike-mlhr')) $('spike-mlhr').textContent = hasRate && out.mlHr != null && isFinite(out.mlHr) ? fmtComma(out.mlHr, 4) : '—';
     if ($('spike-conc')) $('spike-conc').textContent = conc || '—';
     if (extra) extra.hidden = !(hasRate || conc);
   }
   function spikeAmountInfo() {
     var rec = currentSpikeRecipe();
     if (!rec) return null;
-    var vol = parseNum($('drip-volume') && $('drip-volume').value);
+    var vol = parseBagVolume($('spike-volume') && $('spike-volume').value);
     return amountToAdd(rec, vol, spikeWeightKg());
   }
   function drugButtonLabel(group) {
@@ -1276,12 +1916,17 @@
     return group.name;
   }
   function renderSpikeChrome() {
-    var vol = parseNum($('drip-volume') && $('drip-volume').value);
+    var vol = parseBagVolume($('spike-volume') && $('spike-volume').value);
     document.querySelectorAll('.spike-vol').forEach(function (btn) {
       var n = Number(btn.getAttribute('data-ml'));
-      btn.classList.toggle('on', isFinite(vol) && n === vol);
-      btn.setAttribute('aria-pressed', isFinite(vol) && n === vol ? 'true' : 'false');
+      btn.classList.toggle('on', vol != null && n === vol);
+      btn.setAttribute('aria-pressed', vol != null && n === vol ? 'true' : 'false');
     });
+    var box = $('spike-box');
+    if (box) box.classList.toggle('collapsed', !spikeOpen);
+    var toggle = $('spike-toggle');
+    if (toggle) toggle.setAttribute('aria-expanded', spikeOpen ? 'true' : 'false');
+    syncSpikeUnitButtons();
     var group = currentSpikeGroup();
     var rec = currentSpikeRecipe();
     var btn = $('spike-drug-btn');
@@ -1331,13 +1976,21 @@
           tags + '</button>';
       }).join('');
     }
-    var ageWrap = $('spike-age-wrap');
-    if (ageWrap) ageWrap.hidden = !group;
+    var recNeedsWeight = !!(rec && rec.usesWeight);
+    var wtWrap = $('spike-weight-wrap');
+    if (wtWrap) wtWrap.hidden = !recNeedsWeight;
+    var doseWrap = $('spike-dose-wrap');
+    if (doseWrap) doseWrap.hidden = !(rec && rec.formulaMode !== 'timed' && rec.formulaMode !== 'volumeRate' && (rec.doseUnit || (rec.rate && rec.rate.unit)));
+    var timeWrap = $('spike-time-wrap');
+    if (timeWrap) timeWrap.hidden = !(rec && rec.formulaMode === 'timed');
+    var setWrap = $('spike-set-wrap');
+    if (setWrap) setWrap.hidden = !rec;
     var ageNote = $('spike-age-note');
+    var bands = group ? group.recipes.filter(function (r) { return r.ageBand; }) : [];
+    var ageWrap = $('spike-age-wrap');
+    if (ageWrap) ageWrap.hidden = !group || !bands.length;
     if (ageNote) {
-      var bands = group ? group.recipes.filter(function (r) { return r.ageBand; }) : [];
-      if (!group) ageNote.textContent = '';
-      else if (!bands.length) ageNote.textContent = 'Drug Box has no age cutoff for this drug. Pick Adult or Pediatric when both are listed.';
+      if (!group || !bands.length) ageNote.textContent = '';
       else ageNote.textContent = 'Age selects Adult or Pediatric only from a cutoff written in Drug Box.';
     }
     var hint = $('spike-hint');
@@ -1374,9 +2027,15 @@
         if (info && addV) addV.textContent = info.ok ? (fmtComma(info.amount, 6) + ' ' + info.unit) : (info.manual ? 'Enter manually' : '—');
         if (info && addN) addN.textContent = info.note || '';
       }
+      var computed = computeSpikedBag(spikeInputs());
+      var concOnly = (info && info.ok) ? concentrationFromAmount(info.amount, info.unit, vol) : null;
+      fillSpikeRate(computed && computed.rate, concOnly);
     }
   }
   function syncSpikeChrome() {
+    renderSpikeChrome();
+  }
+  function renderSpike() {
     renderSpikeChrome();
   }
   function applyCurrentRecipe(opts) {
@@ -1384,16 +2043,14 @@
     var rec = currentSpikeRecipe();
     spike.applying = true;
     if (!rec) {
-      spike.lastAutoOnHand = null;
       spike.lastAutoDose = null;
       spike.lastAutoTime = null;
       spike.applying = false;
-      renderSpikeChrome();
+      renderSpike();
       return;
     }
-    if (rec.doseUnit && $('drip-dose-unit')) $('drip-dose-unit').value = rec.doseUnit;
     var pre = dosePrefill(rec);
-    var doseEl = $('drip-dose');
+    var doseEl = $('spike-dose');
     if (doseEl) {
       if (pre.fill) {
         if (isBlank(doseEl.value) || sameAuto(spike.lastAutoDose, doseEl.value, pre.unit) || opts.force) {
@@ -1405,28 +2062,25 @@
         spike.lastAutoDose = null;
       }
     }
-    var info = spikeAmountInfo();
-    var onEl = $('drip-onhand');
-    if (onEl) {
-      if (info && info.ok) {
-        if (isBlank(onEl.value) || sameAuto(spike.lastAutoOnHand, onEl.value, $('drip-onhand-unit') && $('drip-onhand-unit').value) || opts.force) {
-          onEl.value = fmt(info.amount, 6);
-          setOnHandSelectUnit(info.unit);
-          spike.lastAutoOnHand = { value: info.amount, unit: info.unit };
-        }
-      } else if (sameAuto(spike.lastAutoOnHand, onEl.value, $('drip-onhand-unit') && $('drip-onhand-unit').value) || opts.force) {
-        onEl.value = '';
-        spike.lastAutoOnHand = null;
-        if (info && info.unit) setOnHandSelectUnit(info.unit);
+    var unit = (pre && pre.unit) || rec.doseUnit;
+    if (unit) setSpikeSelectUnit('spike-dose-unit', unit);
+    var timeEl = $('spike-time');
+    if (rec.formulaMode === 'timed') {
+      if (rec.over && rec.over.exact != null && timeEl && (opts.force || isBlank(timeEl.value) || sameAuto(spike.lastAutoTime, parseTimeToMin(timeEl.value, spikeTimeUnit), spikeTimeUnit))) {
+        timeEl.value = String(rec.over.exact);
+        spikeTimeUnit = 'min';
+        spike.lastAutoTime = { value: rec.over.exact, unit: 'min' };
       }
+    } else if (timeEl && (opts.force || sameAuto(spike.lastAutoTime, parseTimeToMin(timeEl.value, spikeTimeUnit), spikeTimeUnit))) {
+      timeEl.value = '';
+      spike.lastAutoTime = null;
     }
     spike.applying = false;
-    renderSpikeChrome();
+    renderSpike();
   }
   function selectSpikeVolume(ml) {
-    if ($('drip-volume')) $('drip-volume').value = String(ml);
-    applyCurrentRecipe();
-    renderDrip();
+    if ($('spike-volume')) $('spike-volume').value = ml == null ? '' : String(ml);
+    renderSpike();
   }
   function selectSpikeDrug(key) {
     spike.pickerOpen = false;
@@ -1437,8 +2091,7 @@
     if (!spike.drugKey) {
       spike.recipeId = null;
       spike.who = null;
-      renderSpikeChrome();
-      renderDrip();
+      renderSpike();
       return;
     }
     var group = currentSpikeGroup();
@@ -1447,21 +2100,21 @@
     var list = recipesForWho(group, whos.length > 1 ? spike.who : null);
     spike.recipeId = list[0] ? list[0].id : null;
     applyCurrentRecipe({ force: true, clearDose: true });
-    renderDrip();
+    renderSpike();
   }
   function selectSpikeWho(who) {
     spike.who = who;
     var list = recipesForWho(currentSpikeGroup(), who);
     spike.recipeId = list[0] ? list[0].id : null;
     applyCurrentRecipe({ force: true, clearDose: true });
-    renderDrip();
+    renderSpike();
   }
   function selectSpikeRecipe(id) {
     spike.recipeId = id;
     var rec = currentSpikeRecipe();
     if (rec) spike.who = rec.who;
     applyCurrentRecipe({ force: true, clearDose: true });
-    renderDrip();
+    renderSpike();
   }
   function applyAgeToWho() {
     var group = currentSpikeGroup();
@@ -1473,20 +2126,18 @@
   }
   function openSpikePicker(open) {
     spike.pickerOpen = open == null ? !spike.pickerOpen : !!open;
+    if (spike.pickerOpen) {
+      master.pickerOpen = false;
+      renderMasterChrome();
+    }
     renderSpikeChrome();
   }
   function applySpikedBag(values) {
     values = values || {};
-    if (values.volumeMl != null && $('drip-volume')) $('drip-volume').value = values.volumeMl;
+    if (values.volumeMl != null && $('spike-volume')) $('spike-volume').value = values.volumeMl;
     if (values.weight != null) {
-      if ($('drip-weight')) $('drip-weight').value = values.weight;
-      if (values.weightUnit) {
-        weightUnit = values.weightUnit;
-        var kg = $('drip-unit-kg');
-        var lb = $('drip-unit-lb');
-        if (kg) { kg.classList.toggle('on', weightUnit === 'kg'); kg.setAttribute('aria-pressed', weightUnit === 'kg' ? 'true' : 'false'); }
-        if (lb) { lb.classList.toggle('on', weightUnit === 'lb'); lb.setAttribute('aria-pressed', weightUnit === 'lb' ? 'true' : 'false'); }
-      }
+      if ($('spike-weight')) $('spike-weight').value = values.weight;
+      if (values.weightUnit) spikeWeightUnit = values.weightUnit;
     }
     if (values.drugKey) {
       spike.drugKey = values.drugKey;
@@ -1505,13 +2156,21 @@
       }
       applyCurrentRecipe({ force: true });
     }
-    if (values.dose != null && $('drip-dose')) $('drip-dose').value = values.dose;
-    if (values.doseUnit && $('drip-dose-unit')) $('drip-dose-unit').value = values.doseUnit;
-    if (values.dripSet != null && $('drip-set')) $('drip-set').value = values.dripSet;
+    if (values.dose != null && $('spike-dose')) $('spike-dose').value = values.dose;
+    if (values.doseUnit) setSpikeSelectUnit('spike-dose-unit', values.doseUnit);
+    if (values.dripSet != null && $('spike-set')) $('spike-set').value = values.dripSet;
+    if (values.time != null && $('spike-time')) {
+      $('spike-time').value = values.time;
+      if (values.timeUnit) spikeTimeUnit = values.timeUnit;
+    } else if (values.timeMin != null && $('spike-time')) {
+      $('spike-time').value = values.timeMin;
+      spikeTimeUnit = 'min';
+    }
     if (values.age != null && $('spike-age')) $('spike-age').value = values.age;
+    if (values.open != null) setSpikeOpen(!!values.open);
+    else setSpikeOpen(true);
     spike.pickerOpen = false;
-    renderSpikeChrome();
-    renderDrip();
+    renderSpike();
   }
 
   function resetSpike() {
@@ -1522,26 +2181,215 @@
     spike.lastAutoOnHand = null;
     spike.lastAutoDose = null;
     spike.lastAutoTime = null;
-    if ($('spike-age')) $('spike-age').value = '';
+    spike.lastAutoSet = null;
+    ['spike-age', 'spike-weight', 'spike-dose', 'spike-time'].forEach(function (id) {
+      if ($(id)) $(id).value = '';
+    });
+    if ($('spike-volume')) $('spike-volume').value = '';
+    if ($('spike-set')) $('spike-set').value = '60';
+    spikeWeightUnit = 'kg';
+    spikeTimeUnit = 'min';
   }
+  function masterCatalog() {
+    return groupMasterDrugs(listMasterDrugEntries(drugBoxDrugs()), drugBoxDrugs());
+  }
+  function currentMasterGroup() {
+    if (!master.drugKey) return null;
+    var groups = masterCatalog();
+    var i;
+    for (i = 0; i < groups.length; i++) {
+      if (groups[i].drugKey === master.drugKey) return groups[i];
+    }
+    return null;
+  }
+  function currentMasterEntry() {
+    var group = currentMasterGroup();
+    if (!group) return null;
+    if (master.recipeId) {
+      var hit = group.recipes.filter(function (r) { return r.id === master.recipeId; })[0];
+      if (hit) return hit;
+    }
+    var list = recipesForWho(group, master.who);
+    return list[0] || group.recipes[0] || null;
+  }
+  function setFieldHint(id, text) {
+    var el = $(id);
+    if (!el) return;
+    el.textContent = text || '';
+    el.hidden = !text;
+  }
+  function setLoadedTag(id, on) {
+    var el = $(id);
+    if (!el) return;
+    el.hidden = !on;
+  }
+  function renderMasterChrome() {
+    var group = currentMasterGroup();
+    var entry = currentMasterEntry();
+    var pre = masterPrefill(entry);
+    var btn = $('master-drug-btn');
+    if (btn) {
+      btn.innerHTML = escapeHtml(group ? group.name : 'None / custom');
+      if (group && group.extra) btn.innerHTML += ' <span class="spike-tag extra">EXTRA</span>';
+      btn.setAttribute('aria-expanded', master.pickerOpen ? 'true' : 'false');
+      btn.classList.toggle('open', master.pickerOpen);
+    }
+    var picker = $('master-picker');
+    if (picker) {
+      picker.hidden = !master.pickerOpen;
+      var html = '<button type="button" class="spike-opt' + (!master.drugKey ? ' on' : '') + '" data-key="">None / custom</button>';
+      masterCatalog().forEach(function (g) {
+        var cls = 'spike-opt' + (g.drugKey === master.drugKey ? ' on' : '');
+        html += '<button type="button" class="' + cls + '" data-key="' + escapeHtml(g.drugKey) + '">';
+        html += '<span class="spike-opt-name">' + escapeHtml(g.name) + '</span>';
+        if (g.extra) html += '<span class="spike-tag extra">EXTRA</span>';
+        html += '</button>';
+      });
+      picker.innerHTML = html;
+    }
+    var whos = uniqueWhos(group);
+    var whoWrap = $('master-who-wrap');
+    if (whoWrap) {
+      whoWrap.hidden = !(group && whos.length > 1);
+      whoWrap.querySelectorAll('[data-who]').forEach(function (b) {
+        var on = master.who === b.getAttribute('data-who');
+        b.classList.toggle('on', on);
+        b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      });
+    }
+    var recWrap = $('master-recipe-wrap');
+    var recBox = $('master-recipes');
+    if (recWrap && recBox) {
+      var list = recipesForWho(group, whos.length > 1 ? master.who : (whos[0] || null));
+      recWrap.hidden = !(group && list.length > 1);
+      recBox.innerHTML = list.map(function (r) {
+        var cls = 'spike-rec' + (r.id === (entry && entry.id) ? ' on' : '');
+        return '<button type="button" class="' + cls + '" data-id="' + escapeHtml(r.id) + '">' +
+          escapeHtml(r.label) + (whos.length <= 1 && r.who ? ' <span class="spike-who-pill">' + escapeHtml(r.who) + '</span>' : '') +
+          '</button>';
+      }).join('');
+    }
+    setFieldHint('drip-dose-hint', entry ? (pre.doseHint || '') : '');
+    if (entry && pre.mixHint && pre.onHand != null || (entry && pre.mixHint && entry.mix && entry.mix.amount != null)) {
+      setFieldHint('drip-onhand-hint', pre.mixHint);
+      setFieldHint('drip-volume-hint', pre.volumeHint && pre.volumeHint !== pre.mixHint ? pre.volumeHint : '');
+    } else if (entry && (pre.mixHint || pre.volumeHint)) {
+      setFieldHint('drip-onhand-hint', '');
+      setFieldHint('drip-volume-hint', pre.mixHint || pre.volumeHint);
+    } else {
+      setFieldHint('drip-onhand-hint', '');
+      setFieldHint('drip-volume-hint', '');
+    }
+    setLoadedTag('drip-dose-loaded', masterLoadedTagVisible('dose', $('drip-dose') && $('drip-dose').value, null, master.loadedValues));
+    setLoadedTag('drip-onhand-loaded', masterLoadedTagVisible('onHand', $('drip-onhand') && $('drip-onhand').value, $('drip-onhand-unit') && $('drip-onhand-unit').value, master.loadedValues));
+    setLoadedTag('drip-volume-loaded', masterLoadedTagVisible('volume', $('drip-volume') && $('drip-volume').value, null, master.loadedValues));
+  }
+  function writeMasterPrefill(prefill) {
+    var next = applyMasterDrugChange({
+      weight: $('drip-weight') && $('drip-weight').value,
+      weightUnit: weightUnit,
+      dripSet: $('drip-set') && $('drip-set').value,
+      time: $('drip-time') && $('drip-time').value,
+      timeUnit: timeUnit,
+      timeManual: false
+    }, prefill);
+    if ($('drip-dose')) $('drip-dose').value = next.dose == null || next.dose === '' ? '' : String(next.dose);
+    if ($('drip-dose-unit')) $('drip-dose-unit').value = next.doseUnit || 'mcg/kg/min';
+    if ($('drip-onhand')) $('drip-onhand').value = next.onHand == null || next.onHand === '' ? '' : String(next.onHand);
+    if ($('drip-onhand-unit')) $('drip-onhand-unit').value = next.onHandUnit || 'mg';
+    if ($('drip-volume')) $('drip-volume').value = next.volumeMl == null || next.volumeMl === '' ? '' : String(next.volumeMl);
+    master.loadedValues = {
+      dose: next.loadedValues.dose,
+      doseUnit: next.loadedValues.doseUnit,
+      onHand: next.loadedValues.onHand,
+      onHandUnit: next.loadedValues.onHandUnit,
+      volume: next.loadedValues.volume
+    };
+    timeManual = false;
+    timeUnit = next.timeUnit || 'min';
+    if ($('drip-time')) $('drip-time').value = next.time == null || next.time === '' ? '' : String(next.time);
+    syncTimeUnitButtons();
+  }
+  function applyMasterEntry() {
+    writeMasterPrefill(masterPrefill(currentMasterEntry()));
+    renderMasterChrome();
+    renderDrip();
+  }
+  function openMasterPicker(open) {
+    master.pickerOpen = open == null ? !master.pickerOpen : !!open;
+    if (master.pickerOpen) spike.pickerOpen = false;
+    renderMasterChrome();
+    if (typeof renderSpikeChrome === 'function') renderSpikeChrome();
+  }
+  function selectMasterDrug(key) {
+    master.pickerOpen = false;
+    master.drugKey = key || '';
+    if (!master.drugKey) {
+      master.recipeId = null;
+      master.who = null;
+      applyMasterEntry();
+      return;
+    }
+    var group = currentMasterGroup();
+    var whos = uniqueWhos(group);
+    master.who = whos.indexOf('Adult') !== -1 ? 'Adult' : (whos[0] || null);
+    var list = recipesForWho(group, whos.length > 1 ? master.who : null);
+    master.recipeId = list[0] ? list[0].id : null;
+    applyMasterEntry();
+  }
+  function selectMasterWho(who) {
+    master.who = who;
+    var list = recipesForWho(currentMasterGroup(), who);
+    master.recipeId = list[0] ? list[0].id : null;
+    applyMasterEntry();
+  }
+  function selectMasterRecipe(id) {
+    master.recipeId = id;
+    var rec = currentMasterEntry();
+    if (rec) master.who = rec.who;
+    applyMasterEntry();
+  }
+  function resetMasterDrug() {
+    master.drugKey = '';
+    master.recipeId = null;
+    master.who = null;
+    master.pickerOpen = false;
+    master.loadedValues = { dose: null, doseUnit: null, onHand: null, onHandUnit: null, volume: null };
+  }
+
   function clearDrip() {
-    resetSpike();
+    resetMasterDrug();
     ['drip-dose', 'drip-weight', 'drip-volume', 'drip-onhand'].forEach(function (id) {
       if ($(id)) $(id).value = '';
     });
     if ($('drip-dose-unit')) $('drip-dose-unit').value = 'mcg/kg/min';
     if ($('drip-onhand-unit')) $('drip-onhand-unit').value = 'mg';
     if ($('drip-set')) $('drip-set').value = '60';
+    dripLastAutoSet = { value: 60, unit: 'gtt' };
     weightUnit = 'kg';
+    timeUnit = 'min';
+    timeManual = false;
     var kg = $('drip-unit-kg');
     var lb = $('drip-unit-lb');
     if (kg) { kg.classList.add('on'); kg.setAttribute('aria-pressed', 'true'); }
     if (lb) { lb.classList.remove('on'); lb.setAttribute('aria-pressed', 'false'); }
-    renderSpikeChrome();
+    applyAutoTime();
+    renderMasterChrome();
     renderDrip();
   }
   function fillDrip(values) {
     values = values || {};
+    if (values.drugKey) {
+      selectMasterDrug(values.drugKey);
+      if (values.who) selectMasterWho(values.who);
+      if (values.recipeId) selectMasterRecipe(values.recipeId);
+      else if (values.label) {
+        var group = currentMasterGroup();
+        var list = recipesForWho(group, master.who);
+        var hit = list.filter(function (r) { return r.label === values.label; })[0];
+        if (hit) selectMasterRecipe(hit.id);
+      }
+    }
     if (values.dose != null) $('drip-dose').value = values.dose;
     if (values.doseUnit) $('drip-dose-unit').value = values.doseUnit;
     if (values.weight != null) $('drip-weight').value = values.weight;
@@ -1556,6 +2404,17 @@
     if (values.dripSet != null) $('drip-set').value = values.dripSet;
     if (values.onHand != null) $('drip-onhand').value = values.onHand;
     if (values.onHandUnit) $('drip-onhand-unit').value = values.onHandUnit;
+    if (values.dripSet != null && $('drip-set')) {
+      $('drip-set').value = values.dripSet;
+      if (isBlank(values.dripSet)) dripLastAutoSet = { value: 60, unit: 'gtt' };
+    }
+    if (Object.prototype.hasOwnProperty.call(values, 'time') || Object.prototype.hasOwnProperty.call(values, 'timeMin')) {
+      var raw = Object.prototype.hasOwnProperty.call(values, 'time') ? values.time : values.timeMin;
+      timeUnit = values.timeUnit || 'min';
+      if ($('drip-time')) $('drip-time').value = isBlank(raw) ? '' : String(raw);
+      timeManual = true;
+      syncTimeUnitButtons();
+    }
     renderDrip();
   }
   function setWeightUnit(next) {
@@ -1570,6 +2429,25 @@
     var lb = $('drip-unit-lb');
     if (kg) { kg.classList.toggle('on', next === 'kg'); kg.setAttribute('aria-pressed', next === 'kg' ? 'true' : 'false'); }
     if (lb) { lb.classList.toggle('on', next === 'lb'); lb.setAttribute('aria-pressed', next === 'lb' ? 'true' : 'false'); }
+    renderDrip();
+  }
+  function setTimeUnit(next) {
+    if (next === timeUnit) return;
+    var raw = parseNum($('drip-time') && $('drip-time').value);
+    if (isFinite(raw) && raw !== null) {
+      if (next === 'hr') $('drip-time').value = fmt(raw / 60, 6);
+      else $('drip-time').value = fmt(raw * 60, 6);
+    }
+    timeUnit = next;
+    timeManual = true;
+    syncTimeUnitButtons();
+    renderDrip();
+  }
+  function resetTimeAuto() {
+    timeManual = false;
+    applyAutoTime();
+    var unit = DOSE_UNITS[$('drip-dose-unit') && $('drip-dose-unit').value] || DOSE_UNITS['mcg/kg/min'];
+    syncDefaultDripSet(unit);
     renderDrip();
   }
 
@@ -1667,9 +2545,20 @@
       form.addEventListener('change', renderDrip);
       form.addEventListener('submit', function (e) { e.preventDefault(); renderDrip(); });
     }
-    if ($('drip-dose-unit')) $('drip-dose-unit').addEventListener('change', function () { syncTimeAndWeight(); renderDrip(); });
+    if ($('drip-time')) {
+      $('drip-time').addEventListener('input', function () { timeManual = true; });
+      $('drip-time').addEventListener('change', function () { timeManual = true; });
+    }
+    if ($('drip-dose-unit')) $('drip-dose-unit').addEventListener('change', function () {
+      timeManual = false;
+      syncTimeAndWeight();
+      renderDrip();
+    });
     if ($('drip-unit-kg')) $('drip-unit-kg').addEventListener('click', function () { setWeightUnit('kg'); });
     if ($('drip-unit-lb')) $('drip-unit-lb').addEventListener('click', function () { setWeightUnit('lb'); });
+    if ($('drip-time-min')) $('drip-time-min').addEventListener('click', function () { setTimeUnit('min'); });
+    if ($('drip-time-hr')) $('drip-time-hr').addEventListener('click', function () { setTimeUnit('hr'); });
+    if ($('drip-time-auto')) $('drip-time-auto').addEventListener('click', function () { resetTimeAuto(); });
     document.querySelectorAll('.drip-set').forEach(function (btn) {
       btn.addEventListener('click', function () {
         $('drip-set').value = btn.getAttribute('data-gtt');
@@ -1681,6 +2570,26 @@
       btn.addEventListener('click', function () {
         selectSpikeVolume(btn.getAttribute('data-ml'));
       });
+    });
+    if ($('master-drug-btn')) $('master-drug-btn').addEventListener('click', function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      openMasterPicker();
+    });
+    if ($('master-picker')) $('master-picker').addEventListener('click', function (e) {
+      var opt = e.target.closest('[data-key]');
+      if (!opt) return;
+      e.preventDefault();
+      e.stopPropagation();
+      selectMasterDrug(opt.getAttribute('data-key'));
+    });
+    if ($('master-recipes')) $('master-recipes').addEventListener('click', function (e) {
+      var recBtn = e.target.closest('[data-id]');
+      if (recBtn) selectMasterRecipe(recBtn.getAttribute('data-id'));
+    });
+    if ($('master-who-wrap')) $('master-who-wrap').addEventListener('click', function (e) {
+      var w = e.target.closest('[data-who]');
+      if (w) selectMasterWho(w.getAttribute('data-who'));
     });
     if ($('spike-drug-btn')) $('spike-drug-btn').addEventListener('click', function (e) {
       e.preventDefault();
@@ -1707,34 +2616,76 @@
     if ($('spike-typical-btn')) $('spike-typical-btn').addEventListener('click', function () {
       var rec = currentSpikeRecipe();
       var pre = rec ? dosePrefill(rec) : null;
-      if (pre && pre.typical && $('drip-dose')) {
-        $('drip-dose').value = String(pre.typical.value);
-        if (pre.typical.unit && $('drip-dose-unit')) $('drip-dose-unit').value = pre.typical.unit;
+      if (pre && pre.typical && $('spike-dose')) {
+        $('spike-dose').value = String(pre.typical.value);
+        if (pre.typical.unit) setSpikeSelectUnit('spike-dose-unit', pre.typical.unit);
         spike.lastAutoDose = { value: pre.typical.value, unit: pre.typical.unit };
-        renderDrip();
+        renderSpike();
       }
     });
     document.addEventListener('click', function (e) {
+      if (master.pickerOpen) {
+        var masterField = document.querySelector('.master-drug-field');
+        if (!masterField || !masterField.contains(e.target)) openMasterPicker(false);
+      }
       if (!spike.pickerOpen) return;
       var box = $('spike-box');
       if (box && box.contains(e.target)) return;
       openSpikePicker(false);
     });
-    if ($('drip-volume')) $('drip-volume').addEventListener('input', function () {
-      applyCurrentRecipe();
+    if ($('spike-toggle')) $('spike-toggle').addEventListener('click', function (e) {
+      e.preventDefault();
+      setSpikeOpen();
     });
-    if ($('drip-weight')) $('drip-weight').addEventListener('input', function () {
-      applyCurrentRecipe();
+    if ($('spike-volume')) {
+      $('spike-volume').addEventListener('input', renderSpike);
+      $('spike-volume').addEventListener('change', renderSpike);
+    }
+    if ($('spike-weight')) $('spike-weight').addEventListener('input', renderSpike);
+    if ($('spike-dose')) {
+      $('spike-dose').addEventListener('input', function () {
+        if (!sameAuto(spike.lastAutoDose, $('spike-dose').value, $('spike-dose-unit') && $('spike-dose-unit').value)) {
+          spike.lastAutoDose = null;
+        }
+        renderSpike();
+      });
+    }
+    if ($('spike-dose-unit')) $('spike-dose-unit').addEventListener('change', renderSpike);
+    if ($('spike-time')) $('spike-time').addEventListener('input', renderSpike);
+    if ($('spike-set')) $('spike-set').addEventListener('input', renderSpike);
+    if ($('spike-unit-kg')) $('spike-unit-kg').addEventListener('click', function () {
+      if (spikeWeightUnit === 'kg') return;
+      var raw = parseNum($('spike-weight') && $('spike-weight').value);
+      if (isFinite(raw) && raw !== null) $('spike-weight').value = fmt(raw / LB_PER_KG, 6);
+      spikeWeightUnit = 'kg';
+      renderSpike();
     });
-    if ($('drip-onhand')) $('drip-onhand').addEventListener('input', function () {
-      if (!sameAuto(spike.lastAutoOnHand, $('drip-onhand').value, $('drip-onhand-unit') && $('drip-onhand-unit').value)) {
-        spike.lastAutoOnHand = null;
-      }
+    if ($('spike-unit-lb')) $('spike-unit-lb').addEventListener('click', function () {
+      if (spikeWeightUnit === 'lb') return;
+      var raw = parseNum($('spike-weight') && $('spike-weight').value);
+      if (isFinite(raw) && raw !== null) $('spike-weight').value = fmt(raw * LB_PER_KG, 6);
+      spikeWeightUnit = 'lb';
+      renderSpike();
     });
-    if ($('drip-dose')) $('drip-dose').addEventListener('input', function () {
-      if (!sameAuto(spike.lastAutoDose, $('drip-dose').value, $('drip-dose-unit') && $('drip-dose-unit').value)) {
-        spike.lastAutoDose = null;
-      }
+    if ($('spike-time-min')) $('spike-time-min').addEventListener('click', function () {
+      if (spikeTimeUnit === 'min') return;
+      var raw = parseNum($('spike-time') && $('spike-time').value);
+      if (isFinite(raw) && raw !== null) $('spike-time').value = fmt(raw * 60, 6);
+      spikeTimeUnit = 'min';
+      renderSpike();
+    });
+    if ($('spike-time-hr')) $('spike-time-hr').addEventListener('click', function () {
+      if (spikeTimeUnit === 'hr') return;
+      var raw = parseNum($('spike-time') && $('spike-time').value);
+      if (isFinite(raw) && raw !== null) $('spike-time').value = fmt(raw / 60, 6);
+      spikeTimeUnit = 'hr';
+      renderSpike();
+    });
+    document.querySelectorAll('.spike-set').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        if ($('spike-set')) $('spike-set').value = btn.getAttribute('data-gtt');
+        renderSpike();
+      });
     });
     if (form) {
       form.addEventListener('focusin', function (e) {
@@ -1799,7 +2750,8 @@
       pressPad(m);
     });
 
-    renderSpikeChrome();
+    setSpikeOpen(true);
+    renderSpike();
     syncTimeAndWeight();
     renderDrip();
     renderConv(false);
@@ -1826,5 +2778,15 @@
   api.selectSpikeDrug = selectSpikeDrug;
   api.selectSpikeVolume = selectSpikeVolume;
   api.currentSpikeRecipe = currentSpikeRecipe;
+  api.renderSpike = renderSpike;
+  api.setSpikeOpen = setSpikeOpen;
+  api.resetSpike = resetSpike;
+  api.selectMasterDrug = selectMasterDrug;
+  api.selectMasterWho = selectMasterWho;
+  api.selectMasterRecipe = selectMasterRecipe;
+  api.openMasterPicker = openMasterPicker;
+  api.currentMasterEntry = currentMasterEntry;
+  api.resetMasterDrug = resetMasterDrug;
+  api.renderMasterChrome = renderMasterChrome;
   root.PharmCalc = api;
 })(typeof window !== 'undefined' ? window : globalThis);

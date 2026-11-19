@@ -94,7 +94,7 @@
   </header>
   <div class="calc-wrap">
     <div class="calc-tabs seg" role="tablist" aria-label="Calculator mode">
-      <button type="button" role="tab" id="calc-tab-drip" aria-controls="calc-panel-drip" aria-selected="true" class="on">Drip Rate</button>
+      <button type="button" role="tab" id="calc-tab-drip" aria-controls="calc-panel-drip" aria-selected="true" class="on">Master Equation</button>
       <button type="button" role="tab" id="calc-tab-convert" aria-controls="calc-panel-convert" aria-selected="false">Convert</button>
       <button type="button" role="tab" id="calc-tab-calc" aria-controls="calc-panel-calc" aria-selected="false">Calculator</button>
     </div>
@@ -109,11 +109,125 @@
           <span class="qwt-u">kg</span>
         </div>
         <div class="drip-grid">
+          <div class="drip-left">
           <form class="drip-form" id="drip-form" autocomplete="off">
-            <div class="spike-box" id="spike-box">
-              <div class="spike-kicker">Spiked Bag</div>
+            <div class="drip-field spike-drug-field master-drug-field">
+              <span>Drug</span>
+              <button type="button" class="spike-drug-btn" id="master-drug-btn" aria-haspopup="listbox" aria-expanded="false" aria-controls="master-picker">None / custom</button>
+              <div class="spike-picker" id="master-picker" hidden role="listbox" aria-label="Drugs from the Drug Box"></div>
+            </div>
+            <div class="drip-field" id="master-who-wrap" hidden>
+              <span>Dosing</span>
+              <div class="seg drip-unit-seg" role="group" aria-label="Adult or Pediatric dosing">
+                <button type="button" data-who="Adult" aria-pressed="false">Adult</button>
+                <button type="button" data-who="Pediatric" aria-pressed="false">Pediatric</button>
+              </div>
+            </div>
+            <div class="drip-field" id="master-recipe-wrap" hidden>
+              <span>Indication</span>
+              <div class="spike-recipes" id="master-recipes" role="group" aria-label="Indication from Drug Box"></div>
+            </div>
+            <div class="drip-field">
+              <span class="drip-label-row">
+                <span class="drip-label">Desired dose</span>
+                <span class="drip-loaded-tag" id="drip-dose-loaded" hidden>Loaded from Drug Box</span>
+              </span>
+              <div class="drip-inline">
+                <input id="drip-dose" data-slot="dose" type="text" inputmode="decimal" enterkeyhint="next" aria-label="Desired dose">
+                <select id="drip-dose-unit" aria-label="Dose unit">
+                  <option value="mcg/kg/min" selected>mcg/kg/min</option>
+                  <option value="mg/kg/min">mg/kg/min</option>
+                  <option value="mcg/kg/hr">mcg/kg/hr</option>
+                  <option value="mg/kg/hr">mg/kg/hr</option>
+                  <option value="mcg/min">mcg/min</option>
+                  <option value="mg/min">mg/min</option>
+                  <option value="mcg/hr">mcg/hr</option>
+                  <option value="mg/hr">mg/hr</option>
+                  <option value="mcg/kg">mcg/kg</option>
+                  <option value="mg/kg">mg/kg</option>
+                  <option value="mcg">mcg</option>
+                  <option value="mg">mg</option>
+                  <option value="g">g</option>
+                </select>
+              </div>
+              <p class="drip-field-hint" id="drip-dose-hint" hidden></p>
+            </div>
+            <div class="drip-field" id="drip-weight-wrap">
+              <span>Weight</span>
+              <div class="drip-inline">
+                <input id="drip-weight" data-slot="weight" type="text" inputmode="decimal" enterkeyhint="next" aria-label="Weight">
+                <div class="seg drip-unit-seg" role="group" aria-label="Weight unit">
+                  <button type="button" id="drip-unit-kg" class="on" aria-pressed="true">kg</button>
+                  <button type="button" id="drip-unit-lb" aria-pressed="false">lb</button>
+                </div>
+              </div>
+            </div>
+            <div class="drip-field">
+              <span class="drip-label-row">
+                <span class="drip-label">Volume</span>
+                <span class="drip-loaded-tag" id="drip-volume-loaded" hidden>Loaded from Drug Box</span>
+              </span>
+              <div class="drip-inline">
+                <input id="drip-volume" data-slot="volume" type="text" inputmode="decimal" enterkeyhint="next" aria-label="Bag volume in milliliters">
+                <span class="drip-suffix">mL</span>
+              </div>
+              <p class="drip-field-hint" id="drip-volume-hint" hidden></p>
+            </div>
+            <div class="drip-field">
+              <span>Drip set</span>
+              <div class="drip-sets" role="group" aria-label="Drip set drop factor">
+                <button type="button" class="drip-set" data-gtt="10">10</button>
+                <button type="button" class="drip-set" data-gtt="15">15</button>
+                <button type="button" class="drip-set" data-gtt="20">20</button>
+                <button type="button" class="drip-set on" data-gtt="60">60</button>
+              </div>
+              <div class="drip-inline drip-custom">
+                <input id="drip-set" data-slot="dripSet" type="text" inputmode="numeric" value="60" aria-label="Custom drip set">
+                <span class="drip-suffix">gtts/mL</span>
+              </div>
+            </div>
+            <div class="drip-field">
+              <span class="drip-label-row">
+                <span class="drip-label">Drug on hand</span>
+                <span class="drip-loaded-tag" id="drip-onhand-loaded" hidden>Loaded from Drug Box</span>
+              </span>
+              <div class="drip-inline">
+                <input id="drip-onhand" data-slot="onHand" type="text" inputmode="decimal" enterkeyhint="next" aria-label="Drug on hand, amount in the bag">
+                <select id="drip-onhand-unit" aria-label="Drug on hand unit">
+                  <option value="mg" selected>mg</option>
+                  <option value="mcg">mcg</option>
+                  <option value="g">g</option>
+                  <option value="mEq">mEq</option>
+                </select>
+              </div>
+              <p class="drip-field-hint" id="drip-onhand-hint" hidden></p>
+            </div>
+            <div class="drip-field">
+              <span>Time</span>
+              <div class="drip-inline">
+                <input id="drip-time" data-slot="time" type="text" inputmode="decimal" enterkeyhint="done" value="1" aria-label="Time">
+                <div class="seg drip-unit-seg" role="group" aria-label="Time unit">
+                  <button type="button" id="drip-time-min" class="on" aria-pressed="true">min</button>
+                  <button type="button" id="drip-time-hr" aria-pressed="false">hr</button>
+                </div>
+              </div>
+              <div class="drip-time-meta">
+                <span class="drip-suffix" id="drip-time-note">per minute</span>
+                <button type="button" class="ghost drip-time-auto" id="drip-time-auto">Auto</button>
+              </div>
+            </div>
+            <div class="drip-actions">
+              <button type="button" class="ghost" id="drip-clear">Clear</button>
+            </div>
+          </form>
+          <section class="spike-box" id="spike-box">
+            <button type="button" class="spike-toggle" id="spike-toggle" aria-expanded="true" aria-controls="spike-body">
+              <span class="spike-kicker">Spiked Bag / Mixed Drug</span>
+              <span class="spike-chevron" aria-hidden="true"></span>
+            </button>
+            <div class="spike-body" id="spike-body">
               <div class="drip-field">
-                <span>Bag volume</span>
+                <span>Bag size</span>
                 <div class="spike-vols" role="group" aria-label="Bag volume">
                   <button type="button" class="spike-vol" data-ml="50" aria-pressed="false">50</button>
                   <button type="button" class="spike-vol" data-ml="100" aria-pressed="false">100</button>
@@ -121,7 +235,10 @@
                   <button type="button" class="spike-vol" data-ml="500" aria-pressed="false">500</button>
                   <button type="button" class="spike-vol" data-ml="1000" aria-pressed="false">1000</button>
                 </div>
-                <p class="spike-vol-note">mL</p>
+                <div class="drip-inline drip-custom">
+                  <input id="spike-volume" type="text" inputmode="decimal" enterkeyhint="next" aria-label="Custom bag size in milliliters">
+                  <span class="drip-suffix">mL</span>
+                </div>
               </div>
               <div class="drip-field spike-drug-field">
                 <span>Drug</span>
@@ -147,32 +264,60 @@
                 </div>
                 <p class="spike-age-note" id="spike-age-note"></p>
               </label>
-            <label class="drip-field">
-              <span>Desired dose</span>
-              <div class="drip-inline">
-                <input id="drip-dose" data-slot="dose" type="text" inputmode="decimal" enterkeyhint="next" aria-label="Desired dose">
-                <select id="drip-dose-unit" aria-label="Dose unit">
-                  <option value="mcg/kg/min" selected>mcg/kg/min</option>
-                  <option value="mg/kg/min">mg/kg/min</option>
-                  <option value="mcg/kg/hr">mcg/kg/hr</option>
-                  <option value="mg/kg/hr">mg/kg/hr</option>
-                  <option value="mcg/min">mcg/min</option>
-                  <option value="mg/min">mg/min</option>
-                  <option value="mcg/hr">mcg/hr</option>
-                  <option value="mg/hr">mg/hr</option>
-                </select>
-              </div>
-            </label>
-            <div class="drip-field" id="drip-weight-wrap">
-              <span>Weight</span>
-              <div class="drip-inline">
-                <input id="drip-weight" data-slot="weight" type="text" inputmode="decimal" enterkeyhint="next" aria-label="Weight">
-                <div class="seg drip-unit-seg" role="group" aria-label="Weight unit">
-                  <button type="button" id="drip-unit-kg" class="on" aria-pressed="true">kg</button>
-                  <button type="button" id="drip-unit-lb" aria-pressed="false">lb</button>
+              <div class="drip-field" id="spike-weight-wrap" hidden>
+                <span>Weight</span>
+                <div class="drip-inline">
+                  <input id="spike-weight" type="text" inputmode="decimal" enterkeyhint="next" aria-label="Spiked bag weight">
+                  <div class="seg drip-unit-seg" role="group" aria-label="Spiked bag weight unit">
+                    <button type="button" id="spike-unit-kg" class="on" aria-pressed="true">kg</button>
+                    <button type="button" id="spike-unit-lb" aria-pressed="false">lb</button>
+                  </div>
                 </div>
               </div>
-            </div>
+              <div class="drip-field" id="spike-dose-wrap" hidden>
+                <span>Dose</span>
+                <div class="drip-inline">
+                  <input id="spike-dose" type="text" inputmode="decimal" enterkeyhint="next" aria-label="Spiked bag dose">
+                  <select id="spike-dose-unit" aria-label="Spiked bag dose unit">
+                    <option value="mcg/kg/min" selected>mcg/kg/min</option>
+                    <option value="mg/kg/min">mg/kg/min</option>
+                    <option value="mcg/kg/hr">mcg/kg/hr</option>
+                    <option value="mg/kg/hr">mg/kg/hr</option>
+                    <option value="mcg/min">mcg/min</option>
+                    <option value="mg/min">mg/min</option>
+                    <option value="mcg/hr">mcg/hr</option>
+                    <option value="mg/hr">mg/hr</option>
+                    <option value="mcg/kg">mcg/kg</option>
+                    <option value="mg/kg">mg/kg</option>
+                    <option value="mcg">mcg</option>
+                    <option value="mg">mg</option>
+                    <option value="g">g</option>
+                  </select>
+                </div>
+              </div>
+              <div class="drip-field" id="spike-time-wrap" hidden>
+                <span>Time</span>
+                <div class="drip-inline">
+                  <input id="spike-time" type="text" inputmode="decimal" enterkeyhint="done" aria-label="Spiked bag infusion time">
+                  <div class="seg drip-unit-seg" role="group" aria-label="Spiked bag time unit">
+                    <button type="button" id="spike-time-min" class="on" aria-pressed="true">min</button>
+                    <button type="button" id="spike-time-hr" aria-pressed="false">hr</button>
+                  </div>
+                </div>
+              </div>
+              <div class="drip-field" id="spike-set-wrap">
+                <span>Drip set</span>
+                <div class="drip-sets" role="group" aria-label="Spiked bag drip set">
+                  <button type="button" class="spike-set" data-gtt="10">10</button>
+                  <button type="button" class="spike-set" data-gtt="15">15</button>
+                  <button type="button" class="spike-set" data-gtt="20">20</button>
+                  <button type="button" class="spike-set on" data-gtt="60">60</button>
+                </div>
+                <div class="drip-inline drip-custom">
+                  <input id="spike-set" type="text" inputmode="numeric" value="60" aria-label="Spiked bag custom drip set">
+                  <span class="drip-suffix">gtts/mL</span>
+                </div>
+              </div>
               <div class="spike-hint" id="spike-hint" hidden></div>
               <div class="spike-typical" id="spike-typical" hidden>
                 <button type="button" id="spike-typical-btn" class="spike-chip"></button>
@@ -188,62 +333,21 @@
                 </dl>
               </div>
             </div>
-            <label class="drip-field">
-              <span>Volume</span>
-              <div class="drip-inline">
-                <input id="drip-volume" data-slot="volume" type="text" inputmode="decimal" enterkeyhint="next" aria-label="Bag volume in milliliters">
-                <span class="drip-suffix">mL</span>
-              </div>
-            </label>
-            <div class="drip-field">
-              <span>Drip set</span>
-              <div class="drip-sets" role="group" aria-label="Drip set drop factor">
-                <button type="button" class="drip-set" data-gtt="10">10</button>
-                <button type="button" class="drip-set" data-gtt="15">15</button>
-                <button type="button" class="drip-set" data-gtt="20">20</button>
-                <button type="button" class="drip-set on" data-gtt="60">60</button>
-              </div>
-              <div class="drip-inline drip-custom">
-                <input id="drip-set" data-slot="dripSet" type="text" inputmode="numeric" value="60" aria-label="Custom drip set">
-                <span class="drip-suffix">gtts/mL</span>
-              </div>
-            </div>
-            <label class="drip-field">
-              <span>Drug on hand</span>
-              <div class="drip-inline">
-                <input id="drip-onhand" data-slot="onHand" type="text" inputmode="decimal" enterkeyhint="next" aria-label="Drug on hand, amount in the bag">
-                <select id="drip-onhand-unit" aria-label="Drug on hand unit">
-                  <option value="mg" selected>mg</option>
-                  <option value="mcg">mcg</option>
-                  <option value="g">g</option>
-                  <option value="mEq">mEq</option>
-                </select>
-              </div>
-            </label>
-            <div class="drip-field">
-              <span>Time</span>
-              <div class="drip-inline">
-                <input id="drip-time" data-slot="time" type="text" value="1 min" readonly aria-label="Time from the dose unit">
-                <span class="drip-suffix" id="drip-time-note">from the dose unit</span>
-              </div>
-            </div>
-            <div class="drip-actions">
-              <button type="button" class="ghost" id="drip-clear">Clear</button>
-            </div>
-          </form>
+          </section>
+          </div>
           <div class="drip-side">
-            <aside class="fx-card" id="fx-card" aria-label="Master drip-rate formula">
-              <div class="fx-kicker">gtts/min =</div>
+            <aside class="fx-card" id="fx-card" aria-label="Master Equation">
+              <div class="fx-title">Master Equation</div>
+              <div class="fx-kicker" id="fx-kicker">gtts/min =</div>
               <div class="fx-frac" id="fx-frac"></div>
             </aside>
             <div class="drip-result" id="drip-result" aria-live="polite">
               <div class="drip-out" id="drip-out" hidden>
-                <p class="drip-gtts"><b id="drip-gtts">—</b> <span>gtts/min</span></p>
+                <p class="drip-gtts"><b id="drip-gtts">—</b> <span id="drip-unit">gtts/min</span></p>
                 <p class="drip-exact" id="drip-exact"></p>
                 <dl class="drip-extra">
-                  <div id="drip-add-row" hidden><dt>Amount to add</dt><dd id="drip-add">—</dd></div>
-                  <div><dt>mL/hr</dt><dd id="drip-mlhr">—</dd></div>
-                  <div><dt>Concentration</dt><dd id="drip-conc">—</dd></div>
+                  <div id="drip-mlhr-row"><dt>mL/hr</dt><dd id="drip-mlhr">—</dd></div>
+                  <div id="drip-conc-row"><dt>Concentration</dt><dd id="drip-conc">—</dd></div>
                 </dl>
                 <div class="drip-notes" id="drip-notes" hidden></div>
               </div>
@@ -251,7 +355,6 @@
             </div>
           </div>
         </div>
-      </section>
       <section class="calc-panel" id="calc-panel-convert" role="tabpanel" aria-labelledby="calc-tab-convert" hidden>
         <div class="qwt" data-qwt="convert">
           <span class="qwt-k">lb → kg</span>

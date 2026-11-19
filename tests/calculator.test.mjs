@@ -129,7 +129,9 @@ const zeroBag = C.computeDrip({
   dose: 5, doseUnit: 'mcg/kg/min', weight: 80, weightUnit: 'kg',
   volumeMl: 250, dripSet: 60, onHand: 0, onHandUnit: 'mg',
 });
-ok('zero drug on hand is rejected', zeroBag.ok === false && /greater than zero/i.test(zeroBag.error || ''), zeroBag.error);
+ok('zero in the denominator shows nothing, not a hard error',
+  zeroBag.ok === false && zeroBag.invalid === true && !zeroBag.error,
+  JSON.stringify(zeroBag));
 
 const junk = C.computeDrip({
   dose: 'abc', doseUnit: 'mcg/kg/min', weight: 80, weightUnit: 'kg',
@@ -265,6 +267,128 @@ function rec(key, who, labelPart) {
   return recsOf(key).find((r) => r.who === who && r.label.toLowerCase().includes(labelPart.toLowerCase()));
 }
 
+
+console.log('Editable time and auto reset');
+ok('per-minute dose unit auto time is 1 min',
+  C.defaultTimeForUnit('mcg/kg/min').value === 1 && C.defaultTimeForUnit('mcg/kg/min').unit === 'min');
+ok('per-hour dose unit auto time is 60 min',
+  C.defaultTimeForUnit('mg/hr').value === 60);
+ok('mg/kg has no auto time so the box can stay blank',
+  C.defaultTimeForUnit('mg/kg').value == null);
+ok('4 hr parses to 240 min', C.parseTimeToMin(4, 'hr') === 240);
+ok('20 min stays 20', C.parseTimeToMin(20, 'min') === 20);
+ok('"4 hr" in the time box parses to 240 min', C.parseTimeToMin('4 hr') === 240);
+
+const customTime = C.computeDrip({
+  dose: 5, doseUnit: 'mcg/kg/min', weight: 80, weightUnit: 'kg',
+  volumeMl: 250, dripSet: 60, onHand: 400, onHandUnit: 'mg',
+  timeMin: 20,
+});
+ok('custom time 20 min divides the same dopamine example by 20',
+  customTime.ok && nearly(customTime.gttsExact, 15 / 20) && customTime.timeMin === 20,
+  String(customTime.gttsExact));
+const customFx = C.formulaSlots({
+  dose: 5, doseUnit: 'mcg/kg/min', weight: 80, weightUnit: 'kg',
+  volumeMl: 250, dripSet: 60, onHand: 400, onHandUnit: 'mg',
+  timeMin: 20,
+});
+ok('time slot shows the typed 20, not the auto 1',
+  customFx.slots.time.filled === true && customFx.slots.time.display === '20' && customFx.timeMin === 20);
+const blankTimeFx = C.formulaSlots({
+  dose: 5, doseUnit: 'mcg/kg/min', weight: 80, weightUnit: 'kg',
+  volumeMl: 250, dripSet: 60, onHand: 400, onHandUnit: 'mg',
+  timeMin: '',
+});
+ok('cleared time stays a gray empty slot and drops out of the math',
+  blankTimeFx.slots.time.filled === false && blankTimeFx.slots.time.display === 'time');
+const noTime = C.computeDrip({
+  dose: 5, doseUnit: 'mcg/kg/min', weight: 80, weightUnit: 'kg',
+  volumeMl: 250, dripSet: 60, onHand: 400, onHandUnit: 'mg',
+  timeMin: '',
+});
+ok('blank time is omitted (treated as 1) and still solves',
+  noTime.ok && nearly(noTime.gttsExact, 15) && noTime.timeMin == null, String(noTime.gttsExact));
+const zeroTime = C.computeDrip({
+  dose: 5, doseUnit: 'mcg/kg/min', weight: 80, weightUnit: 'kg',
+  volumeMl: 250, dripSet: 60, onHand: 400, onHandUnit: 'mg',
+  timeMin: 0,
+});
+ok('zero time in the denominator shows nothing',
+  zeroTime.ok === false && zeroTime.invalid === true);
+
+console.log('Blank fields drop out');
+const noVol = C.computeDrip({
+  dose: 5, doseUnit: 'mcg/kg/min', weight: 80, weightUnit: 'kg',
+  volumeMl: '', dripSet: 60, onHand: 400, onHandUnit: 'mg',
+});
+ok('blank volume drops out and still returns a number',
+  noVol.ok && nearly(noVol.gttsExact, 15 / 250), String(noVol.gttsExact));
+const onlySet = C.computeDrip({ dose: '', doseUnit: 'mcg/kg/min', weight: '', volumeMl: '', dripSet: '60', onHand: '' });
+ok('only a drip set, with no word-problem values, stays incomplete',
+  onlySet.ok === false && onlySet.incomplete === true);
+const blankSetFx = C.formulaSlots({ dose: 5, doseUnit: 'mcg/kg/min', weight: 80, volumeMl: '', dripSet: '', onHand: '' });
+ok('blank drip set stays gray in the equation graphic',
+  blankSetFx.slots.dripSet.filled === false && blankSetFx.slots.dripSet.display === 'drip set');
+
+console.log('Word problems');
+const wp202 = C.computeDrip({
+  dose: 10, doseUnit: 'mcg/kg/min', weight: 145, weightUnit: 'lb',
+  volumeMl: 250, dripSet: 60, onHand: 200, onHandUnit: 'mg',
+  timeMin: 1,
+});
+ok('202 dobutamine 10 mcg/kg/min, 145 lb, 200 mg/250 mL, 60 gtt, 1 min ≈ 49.4 gtts/min',
+  wp202.ok && wp202.resultUnit === 'gtts/min' && nearly(wp202.gttsExact, 10 * (145 / 2.2) * 250 * 60 / (200000 * 1)) &&
+  C.fmtResult(wp202.gttsExact) === '49.4',
+  JSON.stringify({ exact: wp202.gttsExact, display: C.fmtResult(wp202.gttsExact), unit: wp202.resultUnit, notes: wp202.notes }));
+ok('202 on-hand 200 mg converts to 200,000 mcg',
+  nearly(wp202.onHandMcg, 200000), String(wp202.onHandMcg));
+const wp202fx = C.formulaSlots({
+  dose: 10, doseUnit: 'mcg/kg/min', weight: 145, weightUnit: 'lb',
+  volumeMl: 250, dripSet: 60, onHand: 200, onHandUnit: 'mg', timeMin: 1,
+});
+ok('202 formula shows 200,000 mcg on hand and 65.909... kg from 145 lb',
+  wp202fx.slots.onHand.display === '200,000' && nearly(wp202fx.slots.weight.value, 145 / 2.2),
+  JSON.stringify({ onHand: wp202fx.slots.onHand.display, kg: wp202fx.slots.weight.value }));
+
+const wp203 = C.computeDrip({
+  dose: '', weight: '', volumeMl: 350, dripSet: 20, onHand: '',
+  time: 4, timeUnit: 'hr',
+});
+ok('203 350 mL over 4 hr, 20 gtt, dose/weight/on-hand blank ≈ 29.2 gtts/min',
+  wp203.ok && wp203.resultUnit === 'gtts/min' && nearly(wp203.gttsExact, 350 * 20 / 240) &&
+  wp203.timeMin === 240 && C.fmtResult(wp203.gttsExact) === '29.2',
+  JSON.stringify({ exact: wp203.gttsExact, display: C.fmtResult(wp203.gttsExact), unit: wp203.resultUnit, time: wp203.timeMin }));
+const wp203min = C.computeDrip({
+  volumeMl: 350, dripSet: 20, timeMin: 240,
+});
+ok('203 also works when time is entered as 240 min',
+  wp203min.ok && nearly(wp203min.gttsExact, 29.1666666667) && wp203min.resultUnit === 'gtts/min');
+const wp203fx = C.formulaSlots({
+  volumeMl: 350, dripSet: 20, time: 4, timeUnit: 'hr', dose: '', weight: '', onHand: '',
+});
+ok('203 equation lights volume, set, and 240 min; dose, weight, on-hand stay gray',
+  wp203fx.slots.volume.display === '350' && wp203fx.slots.dripSet.display === '20' &&
+  wp203fx.slots.time.display === '240' && wp203fx.slots.dose.filled === false &&
+  wp203fx.slots.weight.filled === false && wp203fx.slots.onHand.filled === false);
+
+const wp204 = C.computeDrip({
+  dose: 0.3, doseUnit: 'mg/kg', weight: 175, weightUnit: 'lb',
+});
+ok('204 etomidate 0.3 mg/kg, 175 lb, only dose × weight ≈ 23.9 mg',
+  wp204.ok && wp204.resultUnit === 'mg' && nearly(wp204.value, 0.3 * (175 / 2.2)) &&
+  C.fmtResult(wp204.value) === '23.9',
+  JSON.stringify({ exact: wp204.value, display: C.fmtResult(wp204.value), unit: wp204.resultUnit }));
+ok('204 is not labeled gtts/min', wp204.resultUnit === 'mg' && wp204.mlHr == null);
+const wp204fx = C.formulaSlots({
+  dose: 0.3, doseUnit: 'mg/kg', weight: 175, weightUnit: 'lb',
+  volumeMl: '', dripSet: '', onHand: '', timeMin: '',
+});
+ok('204 equation lights dose and weight (79.545... kg); volume, set, on-hand, time stay gray',
+  wp204fx.slots.dose.display === '0.3' && wp204fx.slots.weight.filled &&
+  nearly(wp204fx.slots.weight.value, 175 / 2.2) && wp204fx.slots.volume.filled === false &&
+  wp204fx.slots.dripSet.filled === false && wp204fx.slots.onHand.filled === false &&
+  wp204fx.slots.time.filled === false);
+
 console.log('Spiked Bag catalog');
 const recipes = C.listSpikedBagRecipes(drugs);
 const keys = [...new Set(recipes.map((r) => r.drugKey))];
@@ -398,6 +522,165 @@ const timedFx = C.formulaSlots({ formulaMode: 'timed', volumeMl: 50, dripSet: 60
 ok('timed formula highlights volume × drip set / time and hides dose',
   timedFx.formulaMode === 'timed' && timedFx.numerator.map((s) => s.id).join() === 'volume,dripSet' &&
   timedFx.denominator.map((s) => s.id).join() === 'time' && timedFx.slots.dose.hidden && timedFx.slots.time.display === '10');
+
+
+console.log('Spiked Bag is standalone');
+ok('250 mL is a preset bag size and 75 mL is a custom size',
+  C.isPresetBagVolume(250) && C.parseBagVolume('75') === 75 && C.isPresetBagVolume(75) === false);
+ok('custom bag size rejects blanks and zero',
+  C.parseBagVolume('') == null && C.parseBagVolume(0) == null && C.parseBagVolume('abc') == null);
+
+const master202 = {
+  dose: 10, doseUnit: 'mcg/kg/min', weight: 145, weightUnit: 'lb',
+  volumeMl: 250, dripSet: 60, onHand: 200, onHandUnit: 'mg', timeMin: 1,
+};
+const beforeMaster = C.computeDrip(master202);
+const frozenMaster = JSON.stringify(master202);
+const spikeEpi = C.computeSpikedBag({
+  recipe: epiRosc, volumeMl: 250, weight: 80, weightUnit: 'kg',
+  dripSet: 60, dose: 0.1, doseUnit: 'mcg/kg/min',
+});
+const afterMaster = C.computeDrip(master202);
+ok('Master Equation 202 result is unchanged after a Spiked Bag calculation',
+  beforeMaster.ok && afterMaster.ok && nearly(beforeMaster.gttsExact, afterMaster.gttsExact) &&
+  C.fmtResult(beforeMaster.gttsExact) === '49.4' && JSON.stringify(master202) === frozenMaster,
+  JSON.stringify({ before: beforeMaster.gttsExact, after: afterMaster.gttsExact }));
+ok('Spiked Bag does not report touching Master Equation fields', spikeEpi.masterTouched === false);
+ok('epi ROSC at the 250 mL Drug Box volume adds 1 mg and has its own rate',
+  spikeEpi.amount.ok && spikeEpi.amount.amount === 1 && spikeEpi.amount.unit === 'mg' &&
+  spikeEpi.rate && spikeEpi.rate.ok && nearly(spikeEpi.rate.gttsExact, 120),
+  JSON.stringify({ amount: spikeEpi.amount, rate: spikeEpi.rate && { gtts: spikeEpi.rate.gttsExact, unit: spikeEpi.rate.resultUnit } }));
+ok('Master Equation 202 stays 49.4 gtts/min, not the epi 120 gtts/min rate',
+  C.fmtResult(beforeMaster.gttsExact) === '49.4' && C.fmtResult(spikeEpi.rate.gttsExact) === '120');
+
+const amio150 = recsOf('amiodarone').find((r) => r.who === 'Adult' && r.mix && r.mix.amount === 150);
+ok('found adult amiodarone 150 mg mix for a custom bag test', !!amio150, String(amio150 && amio150.label));
+const custom75 = C.computeSpikedBag({ recipe: amio150, volumeMl: 75, dripSet: 60 });
+ok('custom 75 mL bag is accepted for the 50–100 mL amiodarone mix and adds 150 mg',
+  custom75.amount.ok && custom75.amount.amount === 150 && custom75.volumeMl === 75 && custom75.customVolume === true,
+  JSON.stringify(custom75.amount));
+const custom400 = C.computeSpikedBag({ recipe: epiRosc, volumeMl: 400, dripSet: 60, dose: 0.1, doseUnit: 'mcg/kg/min', weight: 80 });
+ok('custom 400 mL epi bag stays manual because it does not match the 250 mL Drug Box mix',
+  custom400.customVolume === true && custom400.amount.manual === true && /does not match/i.test(custom400.amount.note || ''),
+  custom400.amount.note);
+ok('a Master Equation object passed beside a custom bag is not mutated',
+  JSON.stringify(master202) === frozenMaster);
+
+
+console.log('Master Equation drug picker');
+const masterEntries = C.listMasterDrugEntries(drugs);
+const masterGroups = C.groupMasterDrugs(masterEntries, drugs);
+const boxKeys = Object.keys(drugs);
+ok('picker source lists every Drug Box drug, including drugs with no infusion mix',
+  masterGroups.length === boxKeys.length &&
+  boxKeys.every((k) => masterGroups.some((g) => g.drugKey === k)) &&
+  masterGroups.some((g) => g.drugKey === 'etomidate') &&
+  masterGroups.some((g) => g.drugKey === 'aspirin'));
+ok('Dobutamine is not in drug-box.js, so the picker cannot invent or select it',
+  drugs.dobutamine == null && !masterGroups.some((g) => g.drugKey === 'dobutamine' || /dobutamine/i.test(g.name || '')));
+
+function masterOf(key, who, pred) {
+  const g = masterGroups.find((x) => x.drugKey === key);
+  return (g && g.recipes || []).find((r) => (!who || r.who === who) && (!pred || pred(r)));
+}
+
+const dopaAdult = masterOf('dopamine', 'Adult', (r) => r.dose && r.dose.unit === 'mcg/kg/min');
+const dopaPre = C.masterPrefill(dopaAdult);
+ok('dopamine adult is a range: dose stays blank, unit and mix load from dosage[2]',
+  dopaAdult && dopaAdult.field === 'drugs.dopamine.dosage[2].t (Adult)' &&
+  dopaPre.dose == null && dopaPre.doseUnit === 'mcg/kg/min' &&
+  dopaPre.doseHint === 'Drug Box: 5–20 mcg/kg/min (typically starts 5)' &&
+  dopaPre.onHand === 400 && dopaPre.onHandUnit === 'mg' && dopaPre.volumeMl === 500 &&
+  dopaPre.mixHint === 'Drug Box: 400 mg in 500 mL D5W' &&
+  dopaPre.loadedFields.join() === 'doseUnit,onHand,onHandUnit,volume',
+  JSON.stringify(dopaPre));
+ok('typically starts 5 is hint only — not filled as the desired dose',
+  dopaAdult.dose.typical === 5 && dopaPre.dose == null && /typically starts 5/.test(dopaPre.doseHint));
+
+const amioMaintMaster = masterOf('amiodarone', 'Adult', (r) => /maintenance infusion/i.test(r.label) || /maintenance infusion/i.test(r.text));
+const amioPre = C.masterPrefill(amioMaintMaster);
+ok('amiodarone adult maintenance loads the single 1 mg/min dose and 100 mg in 100 mL mix from dosage[2]',
+  amioMaintMaster && amioMaintMaster.field === 'drugs.amiodarone.dosage[2].t (Adult)' &&
+  amioPre.dose === 1 && amioPre.doseUnit === 'mg/min' && amioPre.doseHint === '' &&
+  amioPre.onHand === 100 && amioPre.onHandUnit === 'mg' && amioPre.volumeMl === 100 &&
+  amioPre.mixHint === 'Drug Box: 100 mg in 100 mL D5W' &&
+  amioPre.loadedFields.indexOf('dose') !== -1,
+  JSON.stringify(amioPre));
+
+const etom = masterOf('etomidate', 'Adult');
+const etomPre = C.masterPrefill(etom);
+ok('etomidate loads the single 0.3 mg/kg bolus from dosage[0]; no mix is invented',
+  etom && etom.field === 'drugs.etomidate.dosage[0].t (Adult)' &&
+  etomPre.dose === 0.3 && etomPre.doseUnit === 'mg/kg' &&
+  etomPre.onHand == null && etomPre.volumeMl == null && etomPre.mixHint === '');
+
+const epiRoscMaster = masterOf('epinephrine', 'Adult', (r) => /ROSC/i.test(r.text));
+const epiPre = C.masterPrefill(epiRoscMaster);
+ok('epi ROSC range stays blank with a 0.1–0.5 hint and loads 1 mg in 250 mL NS from dosage[1]',
+  epiRoscMaster && epiRoscMaster.field === 'drugs.epinephrine.dosage[1].t (Adult)' &&
+  epiPre.dose == null && epiPre.doseUnit === 'mcg/kg/min' &&
+  epiPre.doseHint === 'Drug Box: 0.1–0.5 mcg/kg/min' &&
+  epiPre.onHand === 1 && epiPre.volumeMl === 250,
+  JSON.stringify(epiPre));
+
+const adenoAdult = masterOf('adenosine', 'Adult', (r) => /6 mg/.test(r.text));
+ok('adenosine 6 mg then 12 mg is not treated as a single dose',
+  adenoAdult && C.parseMasterDose(adenoAdult.text).multiple === true && C.masterPrefill(adenoAdult).dose == null);
+
+const loadedDopa = C.applyMasterDrugChange({ weight: 145, weightUnit: 'lb', dripSet: 60 }, dopaPre);
+ok('loading dopamine fills unit and mix, leaves dose blank, keeps weight and drip set, auto time is 1 min',
+  loadedDopa.dose === '' && loadedDopa.doseUnit === 'mcg/kg/min' &&
+  loadedDopa.onHand === 400 && loadedDopa.volumeMl === 500 &&
+  loadedDopa.weight === 145 && loadedDopa.weightUnit === 'lb' && loadedDopa.dripSet === 60 &&
+  loadedDopa.time === 1 && loadedDopa.timeUnit === 'min' && loadedDopa.spikeUntouched === true,
+  JSON.stringify(loadedDopa));
+
+const overridden = Object.assign({}, loadedDopa, { dose: 10, volumeMl: 250, onHand: 200, onHandUnit: 'mg' });
+const masterWp202 = C.computeDrip({
+  dose: overridden.dose, doseUnit: overridden.doseUnit, weight: overridden.weight, weightUnit: overridden.weightUnit,
+  volumeMl: overridden.volumeMl, dripSet: overridden.dripSet, onHand: overridden.onHand, onHandUnit: overridden.onHandUnit,
+  timeMin: 1,
+});
+ok('word problem 202 override (200 mg/250 mL, dose 10) is kept and solves to 49.4 gtts/min',
+  masterWp202.ok && C.fmtResult(masterWp202.gttsExact) === '49.4' && masterWp202.resultUnit === 'gtts/min');
+ok('override hides Loaded tags on volume and on-hand, but the Drug Box mix hint remains',
+  C.masterLoadedTagVisible('volume', 250, null, loadedDopa.loadedValues) === false &&
+  C.masterLoadedTagVisible('onHand', 200, 'mg', loadedDopa.loadedValues) === false &&
+  C.masterLoadedTagVisible('volume', 500, null, loadedDopa.loadedValues) === true &&
+  C.masterLoadedTagVisible('onHand', 400, 'mg', loadedDopa.loadedValues) === true &&
+  loadedDopa.hints.mix === 'Drug Box: 400 mg in 500 mL D5W');
+ok('range-dose field was not autofilled, so typing 10 is a user value and has no Loaded tag',
+  C.masterLoadedTagVisible('dose', 10, 'mcg/kg/min', loadedDopa.loadedValues) === false &&
+  loadedDopa.loaded.dose === false);
+
+const clearedDrug = C.applyMasterDrugChange(overridden, null);
+ok('clearing the drug resets autofilled fields only — weight and drip set stay',
+  clearedDrug.dose === '' && clearedDrug.volumeMl === '' && clearedDrug.onHand === '' &&
+  clearedDrug.doseUnit === 'mcg/kg/min' && clearedDrug.onHandUnit === 'mg' &&
+  clearedDrug.weight === 145 && clearedDrug.weightUnit === 'lb' && clearedDrug.dripSet === 60 &&
+  clearedDrug.hints.dose === '' && clearedDrug.loaded.volume === false,
+  JSON.stringify(clearedDrug));
+
+const switched = C.applyMasterDrugChange(overridden, amioPre);
+ok('changing the drug resets prior autofill/overrides and loads the new Drug Box values, keeping weight and drip set',
+  switched.dose === 1 && switched.doseUnit === 'mg/min' &&
+  switched.onHand === 100 && switched.volumeMl === 100 &&
+  switched.weight === 145 && switched.dripSet === 60 &&
+  C.masterLoadedTagVisible('dose', 1, 'mg/min', switched.loadedValues) === true);
+
+const beforeSpikeObj = { dose: 10, doseUnit: 'mcg/kg/min', weight: 145, weightUnit: 'lb', volumeMl: 250, dripSet: 60, onHand: 200, onHandUnit: 'mg', timeMin: 1 };
+const frozenBefore = JSON.stringify(beforeSpikeObj);
+const afterLoad = C.applyMasterDrugChange({ weight: 80, weightUnit: 'kg', dripSet: 60 }, dopaPre);
+const spikeAfterLoad = C.computeSpikedBag({
+  recipe: epiRosc, volumeMl: 250, weight: 80, weightUnit: 'kg', dripSet: 60, dose: 0.1, doseUnit: 'mcg/kg/min',
+});
+ok('applying a Master Equation drug prefill does not mutate a Spiked Bag input object or 202 problem',
+  afterLoad.spikeUntouched === true && JSON.stringify(beforeSpikeObj) === frozenBefore);
+ok('Spiked Bag still computes its own epi ROSC rate after a Master Equation prefill',
+  spikeAfterLoad.masterTouched === false && spikeAfterLoad.amount && spikeAfterLoad.amount.ok &&
+  spikeAfterLoad.amount.amount === 1 && spikeAfterLoad.rate && C.fmtResult(spikeAfterLoad.rate.gttsExact) === '120');
+ok('Master Equation 202 override stays 49.4 and is not the Spiked Bag 120 gtts/min',
+  C.fmtResult(masterWp202.gttsExact) === '49.4' && C.fmtResult(spikeAfterLoad.rate.gttsExact) === '120');
 
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 if (failed) process.exit(1);
