@@ -382,7 +382,7 @@
     if (window.DrugBoxDesigner && document.body.classList.contains('view-build')) DrugBoxDesigner.close();
     suppressReturn = false;
     document.body.classList.add('view-study', 'view-session');
-    document.body.classList.remove('view-build', 'view-box', 'view-page');
+    document.body.classList.remove('view-build', 'view-box', 'view-page', 'view-calc');
     if (window.DrugBox) DrugBox.close();
     opts.includeExtras = !!opts.includeExtras;
     includeExtras = false;
@@ -426,7 +426,7 @@
     session = null;
     wizardStep = 1;
     includeExtras = false;
-    document.body.classList.remove('view-study', 'view-session', 'view-build', 'view-box');
+    document.body.classList.remove('view-study', 'view-session', 'view-build', 'view-box', 'view-calc');
     document.body.classList.add('view-page');
     renderStudyHome();
   }
@@ -1416,13 +1416,13 @@
     return String(name || '').replace(/ (Sulfate|Hydrochloride|Bromide|Citrate|Chloride|Bitartrate)$/, '');
   }
   function showBox() {
-    document.body.classList.remove('view-page', 'view-session', 'view-study', 'view-build');
+    document.body.classList.remove('view-page', 'view-session', 'view-study', 'view-build', 'view-calc');
     document.body.classList.add('view-box');
     renderFoam();
     renderWall();
   }
   function showPage() {
-    document.body.classList.remove('view-box', 'view-session', 'view-study', 'view-build');
+    document.body.classList.remove('view-box', 'view-session', 'view-study', 'view-build', 'view-calc');
     document.body.classList.add('view-page');
     renderStudyHome();
   }
@@ -2004,7 +2004,7 @@
         returnView = document.body.classList.contains('view-page') ? 'page' : 'box';
         if (window.DrugBox) DrugBox.close();
         document.body.classList.add('view-build');
-        document.body.classList.remove('view-study', 'view-session', 'view-page', 'view-box');
+        document.body.classList.remove('view-study', 'view-session', 'view-page', 'view-box', 'view-calc');
         if (session) { stopClock(); logIfNeeded(); session = null; }
         return openD.apply(this, arguments);
       };
@@ -2014,7 +2014,7 @@
         renderStudyHome();
         renderFoam();
         if (!suppressReturn) {
-          document.body.classList.remove('view-page', 'view-box', 'view-session', 'view-study');
+          document.body.classList.remove('view-page', 'view-box', 'view-session', 'view-study', 'view-calc');
           document.body.classList.add(returnView === 'page' ? 'view-page' : 'view-box');
         }
         return out;

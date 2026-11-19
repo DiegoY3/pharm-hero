@@ -17,6 +17,7 @@
 <link rel="stylesheet" href="assets/theme-t5.css">
 <link rel="stylesheet" href="css/pharm.css">
 <link rel="stylesheet" href="css/shell.css">
+<link rel="stylesheet" href="css/calculator.css">
 <script src="js/access-codes.js"></script>
 </head>
 <body class="pharm view-box">
@@ -45,6 +46,7 @@
     <div class="lid-actions">
       <button type="button" class="lid-btn action build" id="build-from-box"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg><span>Build</span></button>
       <button type="button" class="lid-btn action study" id="study-open"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 6.2C10.4 4.8 8.2 4 6 4H3.5v14H6c2.2 0 4.2.8 6 2.2 1.8-1.4 3.8-2.2 6-2.2h2.5V4H18c-2.2 0-4.4.8-6 2.2z"/><path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M12 6.2v14"/></svg><span>Study</span></button>
+      <button type="button" class="lid-btn action calc icon-only" id="calc-open" aria-label="Calculator" title="Calculator"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><rect x="4" y="2.8" width="16" height="18.4" rx="3" stroke="currentColor" stroke-width="1.8"/><rect x="7" y="5.6" width="10" height="4" rx="1" stroke="currentColor" stroke-width="1.8"/><path stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M8 13.2h.01M12 13.2h.01M16 13.2h.01M8 17.2h.01M12 17.2h.01M16 17.2h.01"/></svg></button>
     </div>
   </header>
   <div class="views" id="views" role="tablist"></div>
@@ -81,6 +83,236 @@
   </dialog>
 </div>
 
+<div id="calc-page">
+  <header class="study-top">
+    <img class="brand-icon" src="assets/icons/pharm-hero.png" alt="">
+    <div class="brand-text">
+      <strong>Pharm Hero</strong>
+      <span>Calculator</span>
+    </div>
+    <button type="button" class="back" id="calc-back">Back to Drug Box</button>
+  </header>
+  <div class="calc-wrap">
+    <div class="calc-tabs seg" role="tablist" aria-label="Calculator mode">
+      <button type="button" role="tab" id="calc-tab-drip" aria-controls="calc-panel-drip" aria-selected="true" class="on">Drip Rate</button>
+      <button type="button" role="tab" id="calc-tab-convert" aria-controls="calc-panel-convert" aria-selected="false">Convert</button>
+      <button type="button" role="tab" id="calc-tab-calc" aria-controls="calc-panel-calc" aria-selected="false">Calculator</button>
+    </div>
+    <div class="calc-panels">
+      <section class="calc-panel on" id="calc-panel-drip" role="tabpanel" aria-labelledby="calc-tab-drip">
+        <div class="qwt" data-qwt="drip">
+          <span class="qwt-k">lb → kg</span>
+          <input class="qwt-lb" id="qwt-drip-lb" type="text" inputmode="decimal" enterkeyhint="done" aria-label="Weight in pounds">
+          <span class="qwt-u">lb</span>
+          <button type="button" class="qwt-go" aria-label="Convert pounds to kilograms, divide by 2.2" title="LB → KG: ÷ 2.2"><svg class="kgi" viewBox="0 0 48 48" aria-hidden="true"><path d="M7.75 19A17 17 0 0 1 40.25 19" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/><path d="M41.6 23.4L44.2 17.6L36.6 19.9Z" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M40.25 29A17 17 0 0 1 7.75 29" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/><path d="M6.4 24.6L3.8 30.4L11.4 28.1Z" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><text x="24" y="28.6" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-weight="900" font-size="12.5" letter-spacing=".3" fill="currentColor">KG</text></svg></button>
+          <output class="qwt-kg" id="qwt-drip-kg" for="qwt-drip-lb">—</output>
+          <span class="qwt-u">kg</span>
+        </div>
+        <div class="drip-grid">
+          <form class="drip-form" id="drip-form" autocomplete="off">
+            <div class="spike-box" id="spike-box">
+              <div class="spike-kicker">Spiked Bag</div>
+              <div class="drip-field">
+                <span>Bag volume</span>
+                <div class="spike-vols" role="group" aria-label="Bag volume">
+                  <button type="button" class="spike-vol" data-ml="50" aria-pressed="false">50</button>
+                  <button type="button" class="spike-vol" data-ml="100" aria-pressed="false">100</button>
+                  <button type="button" class="spike-vol" data-ml="250" aria-pressed="false">250</button>
+                  <button type="button" class="spike-vol" data-ml="500" aria-pressed="false">500</button>
+                  <button type="button" class="spike-vol" data-ml="1000" aria-pressed="false">1000</button>
+                </div>
+                <p class="spike-vol-note">mL</p>
+              </div>
+              <div class="drip-field spike-drug-field">
+                <span>Drug</span>
+                <button type="button" class="spike-drug-btn" id="spike-drug-btn" aria-haspopup="listbox" aria-expanded="false" aria-controls="spike-picker">Custom</button>
+                <div class="spike-picker" id="spike-picker" hidden role="listbox" aria-label="Spiked bag drugs from the Drug Box"></div>
+              </div>
+              <div class="drip-field" id="spike-who-wrap" hidden>
+                <span>Dosing</span>
+                <div class="seg drip-unit-seg" role="group" aria-label="Adult or Pediatric dosing">
+                  <button type="button" data-who="Adult" aria-pressed="false">Adult</button>
+                  <button type="button" data-who="Pediatric" aria-pressed="false">Pediatric</button>
+                </div>
+              </div>
+              <div class="drip-field" id="spike-recipe-wrap" hidden>
+                <span>Indication</span>
+                <div class="spike-recipes" id="spike-recipes" role="group" aria-label="Indication from Drug Box"></div>
+              </div>
+              <label class="drip-field" id="spike-age-wrap" hidden>
+                <span>Age</span>
+                <div class="drip-inline">
+                  <input id="spike-age" type="text" inputmode="decimal" enterkeyhint="next" aria-label="Age in years">
+                  <span class="drip-suffix">years</span>
+                </div>
+                <p class="spike-age-note" id="spike-age-note"></p>
+              </label>
+            <label class="drip-field">
+              <span>Desired dose</span>
+              <div class="drip-inline">
+                <input id="drip-dose" data-slot="dose" type="text" inputmode="decimal" enterkeyhint="next" aria-label="Desired dose">
+                <select id="drip-dose-unit" aria-label="Dose unit">
+                  <option value="mcg/kg/min" selected>mcg/kg/min</option>
+                  <option value="mg/kg/min">mg/kg/min</option>
+                  <option value="mcg/kg/hr">mcg/kg/hr</option>
+                  <option value="mg/kg/hr">mg/kg/hr</option>
+                  <option value="mcg/min">mcg/min</option>
+                  <option value="mg/min">mg/min</option>
+                  <option value="mcg/hr">mcg/hr</option>
+                  <option value="mg/hr">mg/hr</option>
+                </select>
+              </div>
+            </label>
+            <div class="drip-field" id="drip-weight-wrap">
+              <span>Weight</span>
+              <div class="drip-inline">
+                <input id="drip-weight" data-slot="weight" type="text" inputmode="decimal" enterkeyhint="next" aria-label="Weight">
+                <div class="seg drip-unit-seg" role="group" aria-label="Weight unit">
+                  <button type="button" id="drip-unit-kg" class="on" aria-pressed="true">kg</button>
+                  <button type="button" id="drip-unit-lb" aria-pressed="false">lb</button>
+                </div>
+              </div>
+            </div>
+              <div class="spike-hint" id="spike-hint" hidden></div>
+              <div class="spike-typical" id="spike-typical" hidden>
+                <button type="button" id="spike-typical-btn" class="spike-chip"></button>
+              </div>
+              <div class="spike-add" id="spike-add" hidden>
+                <div class="spike-add-k">Amount to add</div>
+                <div class="spike-add-v" id="spike-add-v">—</div>
+                <p class="spike-add-note" id="spike-add-note"></p>
+                <dl class="spike-add-extra" id="spike-add-extra" hidden>
+                  <div><dt>Concentration</dt><dd id="spike-conc">—</dd></div>
+                  <div><dt>gtts/min</dt><dd id="spike-gtts">—</dd></div>
+                  <div><dt>mL/hr</dt><dd id="spike-mlhr">—</dd></div>
+                </dl>
+              </div>
+            </div>
+            <label class="drip-field">
+              <span>Volume</span>
+              <div class="drip-inline">
+                <input id="drip-volume" data-slot="volume" type="text" inputmode="decimal" enterkeyhint="next" aria-label="Bag volume in milliliters">
+                <span class="drip-suffix">mL</span>
+              </div>
+            </label>
+            <div class="drip-field">
+              <span>Drip set</span>
+              <div class="drip-sets" role="group" aria-label="Drip set drop factor">
+                <button type="button" class="drip-set" data-gtt="10">10</button>
+                <button type="button" class="drip-set" data-gtt="15">15</button>
+                <button type="button" class="drip-set" data-gtt="20">20</button>
+                <button type="button" class="drip-set on" data-gtt="60">60</button>
+              </div>
+              <div class="drip-inline drip-custom">
+                <input id="drip-set" data-slot="dripSet" type="text" inputmode="numeric" value="60" aria-label="Custom drip set">
+                <span class="drip-suffix">gtts/mL</span>
+              </div>
+            </div>
+            <label class="drip-field">
+              <span>Drug on hand</span>
+              <div class="drip-inline">
+                <input id="drip-onhand" data-slot="onHand" type="text" inputmode="decimal" enterkeyhint="next" aria-label="Drug on hand, amount in the bag">
+                <select id="drip-onhand-unit" aria-label="Drug on hand unit">
+                  <option value="mg" selected>mg</option>
+                  <option value="mcg">mcg</option>
+                  <option value="g">g</option>
+                  <option value="mEq">mEq</option>
+                </select>
+              </div>
+            </label>
+            <div class="drip-field">
+              <span>Time</span>
+              <div class="drip-inline">
+                <input id="drip-time" data-slot="time" type="text" value="1 min" readonly aria-label="Time from the dose unit">
+                <span class="drip-suffix" id="drip-time-note">from the dose unit</span>
+              </div>
+            </div>
+            <div class="drip-actions">
+              <button type="button" class="ghost" id="drip-clear">Clear</button>
+            </div>
+          </form>
+          <div class="drip-side">
+            <aside class="fx-card" id="fx-card" aria-label="Master drip-rate formula">
+              <div class="fx-kicker">gtts/min =</div>
+              <div class="fx-frac" id="fx-frac"></div>
+            </aside>
+            <div class="drip-result" id="drip-result" aria-live="polite">
+              <div class="drip-out" id="drip-out" hidden>
+                <p class="drip-gtts"><b id="drip-gtts">—</b> <span>gtts/min</span></p>
+                <p class="drip-exact" id="drip-exact"></p>
+                <dl class="drip-extra">
+                  <div id="drip-add-row" hidden><dt>Amount to add</dt><dd id="drip-add">—</dd></div>
+                  <div><dt>mL/hr</dt><dd id="drip-mlhr">—</dd></div>
+                  <div><dt>Concentration</dt><dd id="drip-conc">—</dd></div>
+                </dl>
+                <div class="drip-notes" id="drip-notes" hidden></div>
+              </div>
+              <p class="drip-error" id="drip-error" hidden></p>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="calc-panel" id="calc-panel-convert" role="tabpanel" aria-labelledby="calc-tab-convert" hidden>
+        <div class="qwt" data-qwt="convert">
+          <span class="qwt-k">lb → kg</span>
+          <input class="qwt-lb" id="qwt-convert-lb" type="text" inputmode="decimal" enterkeyhint="done" aria-label="Weight in pounds">
+          <span class="qwt-u">lb</span>
+          <button type="button" class="qwt-go" aria-label="Convert pounds to kilograms, divide by 2.2" title="LB → KG: ÷ 2.2"><svg class="kgi" viewBox="0 0 48 48" aria-hidden="true"><path d="M7.75 19A17 17 0 0 1 40.25 19" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/><path d="M41.6 23.4L44.2 17.6L36.6 19.9Z" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M40.25 29A17 17 0 0 1 7.75 29" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/><path d="M6.4 24.6L3.8 30.4L11.4 28.1Z" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><text x="24" y="28.6" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-weight="900" font-size="12.5" letter-spacing=".3" fill="currentColor">KG</text></svg></button>
+          <output class="qwt-kg" id="qwt-convert-kg" for="qwt-convert-lb">—</output>
+          <span class="qwt-u">kg</span>
+        </div>
+        <div class="conv-box">
+          <div class="calc-tabs seg conv-cats" role="tablist" aria-label="Conversion type" id="conv-cats">
+            <button type="button" class="on" data-cat="mass">Mass</button>
+            <button type="button" data-cat="volume">Volume</button>
+            <button type="button" data-cat="weight">Weight</button>
+            <button type="button" data-cat="time">Time</button>
+            <button type="button" data-cat="temp">Temp</button>
+          </div>
+          <div class="conv-rows" id="conv-rows"></div>
+        </div>
+      </section>
+      <section class="calc-panel" id="calc-panel-calc" role="tabpanel" aria-labelledby="calc-tab-calc" hidden>
+        <div class="qwt" data-qwt="calc">
+          <span class="qwt-k">lb → kg</span>
+          <input class="qwt-lb" id="qwt-calc-lb" type="text" inputmode="decimal" enterkeyhint="done" aria-label="Weight in pounds">
+          <span class="qwt-u">lb</span>
+          <button type="button" class="qwt-go" aria-label="Convert pounds to kilograms, divide by 2.2" title="LB → KG: ÷ 2.2"><svg class="kgi" viewBox="0 0 48 48" aria-hidden="true"><path d="M7.75 19A17 17 0 0 1 40.25 19" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/><path d="M41.6 23.4L44.2 17.6L36.6 19.9Z" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><path d="M40.25 29A17 17 0 0 1 7.75 29" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round"/><path d="M6.4 24.6L3.8 30.4L11.4 28.1Z" fill="currentColor" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/><text x="24" y="28.6" text-anchor="middle" font-family="Inter,system-ui,sans-serif" font-weight="900" font-size="12.5" letter-spacing=".3" fill="currentColor">KG</text></svg></button>
+          <output class="qwt-kg" id="qwt-calc-kg" for="qwt-calc-lb">—</output>
+          <span class="qwt-u">kg</span>
+        </div>
+        <div class="pad-box" id="pad-box">
+          <div class="pad-disp">
+            <div class="pad-expr" id="pad-expr"></div>
+            <div class="pad-val" id="pad-val">0</div>
+          </div>
+          <div class="pad-keys" id="pad-keys">
+            <button type="button" data-k="AC">AC</button>
+            <button type="button" data-k="BS" aria-label="Backspace">DEL</button>
+            <button type="button" data-k="%">%</button>
+            <button type="button" class="op" data-k="/">÷</button>
+            <button type="button" data-k="7">7</button>
+            <button type="button" data-k="8">8</button>
+            <button type="button" data-k="9">9</button>
+            <button type="button" class="op" data-k="*">×</button>
+            <button type="button" data-k="4">4</button>
+            <button type="button" data-k="5">5</button>
+            <button type="button" data-k="6">6</button>
+            <button type="button" class="op" data-k="-">−</button>
+            <button type="button" data-k="1">1</button>
+            <button type="button" data-k="2">2</button>
+            <button type="button" data-k="3">3</button>
+            <button type="button" class="op" data-k="+">+</button>
+            <button type="button" class="zero" data-k="0">0</button>
+            <button type="button" data-k=".">.</button>
+            <button type="button" class="eq" data-k="=">=</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+
 <header class="session-top" id="session-top">
   <img class="brand-icon" src="assets/icons/pharm-hero.png" alt="">
   <div class="brand-text">
@@ -105,6 +337,7 @@
 <script src="js/facts.js"></script>
 <script src="js/progress.js"></script>
 <script src="js/app.js"></script>
+<script src="js/calculator.js"></script>
 <script>
 (function () {
   var host = location.hostname;

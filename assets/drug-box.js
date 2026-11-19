@@ -844,7 +844,7 @@ window.DRUG_BOX = {
     },
     {
      "who": "Adult",
-     "t": "Maintenance: 5-15 mg/hr titrated to rate"
+     "t": "Maintenance: 5-15 mg/hr titrated to rate (100 mg in 100 ml D5W/NS)"
     }
    ],
    "indications": [
@@ -894,7 +894,7 @@ window.DRUG_BOX = {
     },
     {
      "who": "Adult",
-     "t": "5-20 mcg/kg/min, typically starts 5 mcg/kg/min"
+     "t": "5-20 mcg/kg/min, typically starts 5 mcg/kg/min (400mg/500ml D5W)"
     },
     {
      "who": "Pediatric",
@@ -906,7 +906,7 @@ window.DRUG_BOX = {
     },
     {
      "who": "Pediatric",
-     "t": "2-20 mcg/kg/min, typically starts 2 mcg/kg/min titrated to age-specific BP"
+     "t": "2-20 mcg/kg/min, typically starts 2 mcg/kg/min titrated to age-specific BP (400mg/500ml D5W)"
     }
    ],
    "indications": [
@@ -1850,7 +1850,7 @@ window.DRUG_BOX = {
     },
     {
      "who": "Adult",
-     "t": "If transport delayed: 2nd 1gm over 8 hr"
+     "t": "If transport delayed: 2nd 1gm/100ml NS over 8 hr"
     },
     {
      "who": "Pediatric",
@@ -2104,7 +2104,7 @@ window.DRUG_BOX = {
     },
     {
      "who": "Adult",
-     "t": "Hypotension/shock & post-ROSC: 0.1-0.5 mcg/kg/min, titrate to SBP ≥90 / MAP ≥65 mmHg"
+     "t": "Hypotension/shock & post-ROSC: 0.1-0.5 mcg/kg/min, titrate to SBP ≥90 / MAP ≥65 mmHg (4mg/250ml D5W)"
     },
     {
      "who": "Pediatric",
@@ -2112,7 +2112,7 @@ window.DRUG_BOX = {
     },
     {
      "who": "Pediatric",
-     "t": "Shock (fluid-refractory, warm/vasodilated): 0.1-2 mcg/kg/min, titrate to age-specific BP"
+     "t": "Shock (fluid-refractory, warm/vasodilated): 0.1-2 mcg/kg/min, titrate to age-specific BP (4mg/250ml D5W)"
     }
    ],
    "indications": [
