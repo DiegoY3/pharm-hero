@@ -682,5 +682,50 @@ ok('Spiked Bag still computes its own epi ROSC rate after a Master Equation pref
 ok('Master Equation 202 override stays 49.4 and is not the Spiked Bag 120 gtts/min',
   C.fmtResult(masterWp202.gttsExact) === '49.4' && C.fmtResult(spikeAfterLoad.rate.gttsExact) === '120');
 
+
+console.log('Calculator tab panel structure');
+const pageHtml = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+function panelAncestors(html, id) {
+  const re = /<\/?([a-zA-Z][a-zA-Z0-9:-]*)\b[^>]*>/g;
+  const voidTags = new Set(['input','img','br','hr','meta','link','source','area','col','embed','wbr']);
+  const stack = [];
+  let m;
+  while ((m = re.exec(html))) {
+    const tag = m[1].toLowerCase();
+    const raw = m[0];
+    if (raw.startsWith('</')) {
+      for (let i = stack.length - 1; i >= 0; i--) {
+        if (stack[i].tag === tag) { stack.splice(i); break; }
+      }
+      continue;
+    }
+    const self = /\/\s*>$/.test(raw) || voidTags.has(tag);
+    const idM = raw.match(/\sid=(["'])([^"']+)\1/i);
+    const classM = raw.match(/\sclass=(["'])([^"']*)\1/i);
+    const el = { tag, id: idM ? idM[2] : '', className: classM ? classM[2] : '' };
+    if (el.id === id) return stack.map((s) => s.id || s.className.split(/\s+/)[0] || s.tag);
+    if (!self) stack.push(el);
+  }
+  return null;
+}
+const dripParents = panelAncestors(pageHtml, 'calc-panel-drip');
+const convertParents = panelAncestors(pageHtml, 'calc-panel-convert');
+const calcParents = panelAncestors(pageHtml, 'calc-panel-calc');
+ok('found the three calculator tab panels in index.html', !!(dripParents && convertParents && calcParents));
+ok('Convert is a sibling of Master Equation, not nested inside it',
+  convertParents && convertParents.indexOf('calc-panel-drip') === -1,
+  JSON.stringify(convertParents));
+ok('Calculator (keypad) is a sibling of Master Equation, not nested inside it',
+  calcParents && calcParents.indexOf('calc-panel-drip') === -1,
+  JSON.stringify(calcParents));
+ok('all three panels are under .calc-panels so hiding one cannot hide the others',
+  dripParents && convertParents && calcParents &&
+  dripParents.indexOf('calc-panels') !== -1 &&
+  convertParents.indexOf('calc-panels') !== -1 &&
+  calcParents.indexOf('calc-panels') !== -1 &&
+  convertParents.join('>') === dripParents.join('>') &&
+  calcParents.join('>') === dripParents.join('>'),
+  JSON.stringify({ dripParents, convertParents, calcParents }));
+
 console.log('\n' + passed + ' passed, ' + failed + ' failed');
 if (failed) process.exit(1);
